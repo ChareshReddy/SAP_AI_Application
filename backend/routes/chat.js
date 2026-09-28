@@ -162,6 +162,28 @@ export async function validateCopyBomParameters({
     };
   }
 
+  // Pre-validate TARGET BOM in CS03 (BOM cannot be cross-plant copied onto an existing target BOM in CS01)
+  let targetCheck = null;
+  try {
+    targetCheck = await verifyBomInCs03({
+      material: cleanTgtMat,
+      plant: cleanTgtPlant,
+      bomUsage: cleanTgtUsage,
+      alternativeBom: cleanTgtAlt
+    });
+  } catch (targetErr) {
+    console.warn('[chat.js] target BOM pre-check warning:', targetErr.message);
+  }
+
+  if (targetCheck && targetCheck.exists) {
+    const alts = targetCheck.availableAlternatives?.length ? targetCheck.availableAlternatives.join(', ') : (cleanTgtAlt || '1');
+    return {
+      valid: false,
+      code: 'TARGET_BOM_ALREADY_EXISTS',
+      message: `Cannot copy BOM: Material ${cleanTgtMat} already exists in target plant ${cleanTgtPlant} with BOM usage ${cleanTgtUsage} (existing alternative(s): ${alts}). In SAP GUI (CS01), cross-plant copying from another plant is only supported when creating a new BOM, not when adding alternatives to an existing BOM. Please delete the existing BOM in plant ${cleanTgtPlant} first, or specify a different target.`
+    };
+  }
+
   // Pre-flight sub-BOM dependency check
   let subBomDependencies = null;
   try {
@@ -193,7 +215,8 @@ export async function validateCopyBomParameters({
       targetMaterial: cleanTgtMat,
       targetPlant: cleanTgtPlant,
       targetUsage: cleanTgtUsage,
-      targetAltBom: cleanTgtAlt
+      targetAltBom: cleanTgtAlt,
+      sourceComponents: sourceCheck.components || []
     },
     availableAlternatives: sourceCheck.availableAlternatives || [],
     subBomDependencies: subBomDependencies || {
@@ -1360,7 +1383,9 @@ router.post('/', async (req, res) => {
         result = await copyBomViaGui({
           ...copyParams,
           copiedMainOnly: !copySubBoms,
-          missingSubBomMaterials: missingSubs.map((s) => s.material)
+          missingSubBomMaterials: missingSubs.map((s) => s.material),
+          skipSourceCheck: Boolean(copyParams.sourceComponents && copyParams.sourceComponents.length > 0),
+          sourceComponents: copyParams.sourceComponents || []
         });
 
         if (!result.success || result.verified === false) {
@@ -1562,6 +1587,8 @@ router.post('/', async (req, res) => {
         alternativeBom: clean.targetAltBom,
         validFrom
       },
+      sourceComponents: clean.sourceComponents || [],
+      availableAlternatives: validation.availableAlternatives || [],
       subBomDependencies: validation.subBomDependencies
     };
 
@@ -1942,6 +1969,8 @@ router.post('/', async (req, res) => {
             const payload = {
               source: { material: clean.sourceMaterial, plant: clean.sourcePlant, bomUsage: clean.sourceUsage },
               target: { material: clean.targetMaterial, plant: clean.targetPlant, bomUsage: clean.targetUsage },
+              sourceComponents: clean.sourceComponents || [],
+              availableAlternatives: validation.availableAlternatives || [],
               subBomDependencies: validation.subBomDependencies
             };
             const pending = pendingActionStore.createPendingAction({
@@ -2297,6 +2326,8 @@ router.post('/', async (req, res) => {
                 const payload = {
                   source: { material: clean.sourceMaterial, plant: clean.sourcePlant, bomUsage: clean.sourceUsage },
                   target: { material: clean.targetMaterial, plant: clean.targetPlant, bomUsage: clean.targetUsage },
+                  sourceComponents: clean.sourceComponents || [],
+                  availableAlternatives: validation.availableAlternatives || [],
                   subBomDependencies: validation.subBomDependencies
                 };
 
@@ -2497,6 +2528,8 @@ router.post('/', async (req, res) => {
                 alternativeBom: clean.targetAltBom,
                 validFrom
               },
+              sourceComponents: clean.sourceComponents || [],
+              availableAlternatives: validation.availableAlternatives || [],
               subBomDependencies: validation.subBomDependencies
             };
 

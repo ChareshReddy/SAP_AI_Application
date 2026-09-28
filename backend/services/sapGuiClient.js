@@ -2025,12 +2025,23 @@ export async function copyBomViaGui(params) {
   }
 
   // Rule 1, 2, 3, 4, 9: Validate source BOM exists in CS03 before opening CS01
-  const sourceCheck = await verifyBomInCs03({
-    material: cleanSourceMat,
-    plant: cleanSourcePlant,
-    bomUsage: cleanSourceUsage,
-    alternativeBom: cleanSourceAlt
-  });
+  let sourceCheck;
+  if (params.skipSourceCheck && params.sourceComponents && params.sourceComponents.length > 0) {
+    sourceCheck = {
+      success: true,
+      exists: true,
+      components: params.sourceComponents,
+      componentCount: params.sourceComponents.length,
+      availableAlternatives: params.availableAlternatives || [cleanSourceAlt || '1']
+    };
+  } else {
+    sourceCheck = await verifyBomInCs03({
+      material: cleanSourceMat,
+      plant: cleanSourcePlant,
+      bomUsage: cleanSourceUsage,
+      alternativeBom: cleanSourceAlt
+    });
+  }
 
   if (!sourceCheck.success) {
     return {
@@ -2408,12 +2419,48 @@ capturedRefUsageId = "${CS01_FIELD_IDS.COPY_REF_BOM_USAGE}"
 capturedRefAltId = "${CS01_FIELD_IDS.COPY_REF_ALT_BOM}"
 
 ' 5. Fill Reference/Source BOM in Copy From popup
-Dim wnd1
+Dim wnd1, fldRefMat, fldRefPlt, fldRefUsg, fldRefAlt
 Set wnd1 = session.findById("wnd[1]")
-wnd1.findById("usr/ctxtRC29N-MATNR").text = "${sourceMaterial}"
-wnd1.findById("usr/ctxtRC29N-WERKS").text = "${sourcePlant}"
-wnd1.findById("usr/ctxtRC29N-STLAN").text = "${sourceBomUsage}"
-${sourceAltBom ? `wnd1.findById("usr/txtRC29N-STLAL").text = "${sourceAltBom}"` : ''}
+Set fldRefMat = Nothing
+Set fldRefPlt = Nothing
+Set fldRefUsg = Nothing
+Set fldRefAlt = Nothing
+
+On Error Resume Next
+Set fldRefMat = wnd1.findById("usr/ctxtRC29N-MATNR")
+Set fldRefPlt = wnd1.findById("usr/ctxtRC29N-WERKS")
+Set fldRefUsg = wnd1.findById("usr/ctxtRC29N-STLAN")
+Set fldRefAlt = wnd1.findById("usr/txtRC29N-STLAL")
+On Error Goto 0
+
+' Check if Plant field is locked to target plant and differs from source plant
+If Not fldRefPlt Is Nothing Then
+    If (Not fldRefPlt.changeable) And UCase(Trim(fldRefPlt.text)) <> UCase("${sourcePlant}") Then
+        WScript.Echo "{""success"":false,""verified"":false,""code"":""TARGET_BOM_EXISTS_CANNOT_COPY"",""message"":""Cannot copy BOM: Material ${targetMaterial} already has an existing BOM in target plant ${targetPlant}. In SAP GUI, cross-plant copy is not permitted when adding an alternative to an existing BOM. Please delete the existing BOM in plant ${targetPlant} or select a different target.""}"
+        On Error Resume Next
+        wnd1.findById("tbar[0]/btn[12]").press
+        session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+        session.findById("wnd[0]").sendVKey 0
+        On Error Goto 0
+        WScript.Quit 0
+    End If
+End If
+
+' Safely assign only changeable fields to avoid SAP Frontend Server invalid argument COM error 613
+If Not fldRefMat Is Nothing Then
+    If fldRefMat.changeable Then fldRefMat.text = "${sourceMaterial}"
+End If
+If Not fldRefPlt Is Nothing Then
+    If fldRefPlt.changeable Then fldRefPlt.text = "${sourcePlant}"
+End If
+If Not fldRefUsg Is Nothing Then
+    If fldRefUsg.changeable Then fldRefUsg.text = "${sourceBomUsage}"
+End If
+If Not fldRefAlt Is Nothing Then
+    If fldRefAlt.changeable And "${sourceAltBom}" <> "" Then
+        fldRefAlt.text = "${sourceAltBom}"
+    End If
+End If
 
 ' Confirm Copy From Dialog (Green check tick: btn[0] / Enter)
 wnd1.findById("tbar[0]/btn[0]").press
