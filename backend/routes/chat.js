@@ -22,7 +22,20 @@ import { sessionStore } from '../services/sessionStore.js';
 import { decryptCredentials } from '../services/encryption.js';
 import { pendingActionStore } from '../services/pendingActions.js';
 import { auditLogger } from '../services/auditLog.js';
-import { copyBomViaGui, deleteBomViaGui, verifyBomInCs03, checkBomSubDependencies, ensureSapSession, getActiveSapUser, getSelectedSapUser, getSelectedSapSessionId } from '../services/sapGuiClient.js';
+import {
+  copyBomViaGui,
+  deleteBomViaGui,
+  verifyBomInCs03,
+  discoverBomHierarchy,
+  resolveNextAvailableAlternative,
+  formatHierarchyTree,
+  verifyHierarchyStructure,
+  checkBomSubDependencies,
+  ensureSapSession,
+  getActiveSapUser,
+  getSelectedSapUser,
+  getSelectedSapSessionId
+} from '../services/sapGuiClient.js';
 import {
   ENTITY_REGISTRY,
   getEntitySchema,
@@ -162,32 +175,10 @@ export async function validateCopyBomParameters({
     };
   }
 
-  // Pre-validate TARGET BOM in CS03 (BOM cannot be cross-plant copied onto an existing target BOM in CS01)
-  let targetCheck = null;
+  // Discover complete BOM hierarchy and resolve next available alternatives
+  let hierarchy = null;
   try {
-    targetCheck = await verifyBomInCs03({
-      material: cleanTgtMat,
-      plant: cleanTgtPlant,
-      bomUsage: cleanTgtUsage,
-      alternativeBom: cleanTgtAlt
-    });
-  } catch (targetErr) {
-    console.warn('[chat.js] target BOM pre-check warning:', targetErr.message);
-  }
-
-  if (targetCheck && targetCheck.exists) {
-    const alts = targetCheck.availableAlternatives?.length ? targetCheck.availableAlternatives.join(', ') : (cleanTgtAlt || '1');
-    return {
-      valid: false,
-      code: 'TARGET_BOM_ALREADY_EXISTS',
-      message: `Cannot copy BOM: Material ${cleanTgtMat} already exists in target plant ${cleanTgtPlant} with BOM usage ${cleanTgtUsage} (existing alternative(s): ${alts}). In SAP GUI (CS01), cross-plant copying from another plant is only supported when creating a new BOM, not when adding alternatives to an existing BOM. Please delete the existing BOM in plant ${cleanTgtPlant} first, or specify a different target.`
-    };
-  }
-
-  // Pre-flight sub-BOM dependency check
-  let subBomDependencies = null;
-  try {
-    subBomDependencies = await checkBomSubDependencies({
+    hierarchy = await discoverBomHierarchy({
       source: {
         material: cleanSrcMat,
         plant: cleanSrcPlant,
@@ -201,9 +192,11 @@ export async function validateCopyBomParameters({
         alternativeBom: cleanTgtAlt
       }
     });
-  } catch (subErr) {
-    console.warn('[chat.js] checkBomSubDependencies warning:', subErr.message);
+  } catch (hierErr) {
+    console.warn('[chat.js] discoverBomHierarchy warning:', hierErr.message);
   }
+
+  const resolvedMainAlt = hierarchy?.mainBom?.targetAlt || cleanTgtAlt || '1';
 
   return {
     valid: true,
@@ -215,24 +208,27 @@ export async function validateCopyBomParameters({
       targetMaterial: cleanTgtMat,
       targetPlant: cleanTgtPlant,
       targetUsage: cleanTgtUsage,
-      targetAltBom: cleanTgtAlt,
+      targetAltBom: resolvedMainAlt,
       sourceComponents: sourceCheck.components || []
     },
     availableAlternatives: sourceCheck.availableAlternatives || [],
-    subBomDependencies: subBomDependencies || {
-      mainBom: {
+    hierarchy,
+    copyOrder: hierarchy?.copyOrder || [],
+    // Retain subBomDependencies for backward compatibility with existing tests/APIs
+    subBomDependencies: {
+      mainBom: hierarchy?.mainBom || {
         material: cleanTgtMat,
         sourcePlant: cleanSrcPlant,
         targetPlant: cleanTgtPlant,
         bomUsage: cleanTgtUsage,
-        alternativeBom: cleanTgtAlt || '1',
+        alternativeBom: resolvedMainAlt,
         componentCount: sourceCheck.componentCount || 0
       },
-      missingSubBoms: [],
+      missingSubBoms: hierarchy?.copyOrder?.filter((b) => b.depth > 0) || [],
       existingSubBoms: [],
-      unextendedMaterials: [],
+      unextendedMaterials: hierarchy?.unextendedMaterials || [],
       totalBomsMainOnly: 1,
-      totalBomsWithSub: 1
+      totalBomsWithSub: hierarchy?.copyOrder?.length || 1
     }
   };
 }
@@ -1323,90 +1319,116 @@ router.post('/', async (req, res) => {
         }
 
         const copyParams = action.payload;
-        const copySubBoms = Boolean(req.body?.copySubBoms ?? copyParams.copySubBoms ?? false);
-        const subDeps = copyParams.subBomDependencies || action.preview?.subBomDependencies;
-        const missingSubs = subDeps?.missingSubBoms || [];
+        // Check for copySubBoms: if caller explicitly sent false (backwards compatibility), respect it
+        const copySubBoms = req.body?.copySubBoms !== undefined ? Boolean(req.body.copySubBoms) : (copyParams.copySubBoms !== undefined ? Boolean(copyParams.copySubBoms) : true);
+
+        let copyOrder = copyParams.copyOrder || copyParams.hierarchy?.copyOrder;
+
+        if (!copyOrder || copyOrder.length === 0) {
+          const hierarchy = await discoverBomHierarchy({
+            source: copyParams.source,
+            target: copyParams.target
+          });
+          copyOrder = hierarchy.copyOrder;
+        }
+
+        // If explicitly requested main BOM only (legacy compatibility)
+        if (!copySubBoms) {
+          copyOrder = copyOrder.filter((b) => b.depth === 0);
+        }
 
         const createdRecords = [];
 
-        // Decision 4 & 5: If user requested sub-BOM copy, copy missing sub-BOMs first (deepest first)
-        if (copySubBoms && missingSubs.length > 0) {
-          for (const sub of missingSubs) {
-            const sessCheck = await ensureSapSession();
-            if (!sessCheck.ok) {
-              const err = new Error(`Cannot execute sub-BOM copy for ${sub.material}: ${sessCheck.message}`);
-              err.code = sessCheck.code || 'SAP_SESSION_NOT_FOUND';
-              throw err;
-            }
-
-            const subResult = await copyBomViaGui({
-              source: {
-                material: sub.material,
-                plant: sub.sourcePlant,
-                bomUsage: sub.bomUsage || '1'
-              },
-              target: {
-                material: sub.material,
-                plant: sub.targetPlant,
-                bomUsage: sub.bomUsage || '1'
-              }
-            });
-
-            if (!subResult.success || subResult.verified === false) {
-              // Fail-safe stop: If a sub-BOM copy fails, stop and report. Do not continue to the main BOM.
-              const err = new Error(`Sub-BOM copy failed for material ${sub.material} in plant ${sub.targetPlant}: ${subResult.message || 'Operation failed'}. Main BOM copy halted.`);
-              err.code = subResult.code || 'SUB_BOM_COPY_FAILED';
-              throw err;
-            }
-
-            // Safety: Each extra BOM created (sub-BOMs) needs its own audit entry and its own CS03 verification
-            auditLogger.logAction({
-              sapUsername: username,
-              entityKey: 'bom',
-              actionType: 'copy_bom',
-              recordId: sub.material,
-              businessPartnerId: sub.material,
-              beforeValues: subResult.before,
-              afterValues: subResult.after,
-              sourcePrompt: `Prerequisite sub-BOM copy for main BOM ${copyParams.target?.material}`,
-              actionId: `${action.actionId}_sub_${sub.material}`,
-              system: actionSystem,
-              task: `Sub-BOM Copy (${sub.material})`,
-              reason: providedReason || null
-            });
-
-            createdRecords.push(subResult.after);
+        // Execute bottom-up: deepest sub-BOMs first, main BOM last
+        for (let i = 0; i < copyOrder.length; i++) {
+          const bomItem = copyOrder[i];
+          const sessCheck = await ensureSapSession();
+          if (!sessCheck.ok) {
+            const err = new Error(`Cannot execute copy for ${bomItem.material}: ${sessCheck.message}`);
+            err.code = sessCheck.code || 'SAP_SESSION_NOT_FOUND';
+            throw err;
           }
+
+          const subResult = await copyBomViaGui({
+            source: {
+              material: bomItem.sourceMaterial || bomItem.material,
+              plant: bomItem.sourcePlant,
+              bomUsage: bomItem.bomUsage || '1',
+              alternativeBom: bomItem.sourceAlt || ''
+            },
+            target: {
+              material: bomItem.material,
+              plant: bomItem.targetPlant,
+              bomUsage: bomItem.bomUsage || '1',
+              alternativeBom: bomItem.targetAlt || ''
+            },
+            copiedMainOnly: !copySubBoms,
+            skipSourceCheck: Boolean(bomItem.components && bomItem.components.length > 0),
+            sourceComponents: bomItem.components || []
+          });
+
+          if (!subResult.success || subResult.verified === false) {
+            // Fail-stop behavior: halt immediately, report failing BOM, plant, alternative, and SAP error
+            const err = new Error(`BOM copy failed for material ${bomItem.material} in plant ${bomItem.targetPlant} (Alternative ${bomItem.targetAlt || '1'}): ${subResult.message || 'Operation failed'}. Execution stopped.`);
+            err.code = subResult.code || 'COPY_BOM_FAILED';
+            err.failedBom = { material: bomItem.material, plant: bomItem.targetPlant, alternative: bomItem.targetAlt || '1' };
+            throw err;
+          }
+
+          // Safety & Audit: An audit entry is recorded for EVERY created BOM
+          auditLogger.logAction({
+            sapUsername: username,
+            entityKey: 'bom',
+            actionType: 'copy_bom',
+            recordId: bomItem.material,
+            businessPartnerId: bomItem.material,
+            beforeValues: subResult.before,
+            afterValues: subResult.after,
+            sourcePrompt: bomItem.depth > 0
+              ? `Hierarchy sub-BOM copy (depth ${bomItem.depth}) for main BOM ${copyParams.target?.material}`
+              : (action.sourcePrompt || `Copy BOM hierarchy ${bomItem.material}`),
+            actionId: `${action.actionId}_bom_${i}_${bomItem.material}`,
+            system: actionSystem,
+            task: bomItem.depth > 0 ? `Sub-BOM Copy (${bomItem.material})` : `Main BOM Copy (${bomItem.material})`,
+            reason: providedReason || null
+          });
+
+          createdRecords.push(subResult.after);
         }
 
-        // Now execute main BOM copy
-        result = await copyBomViaGui({
-          ...copyParams,
-          copiedMainOnly: !copySubBoms,
-          missingSubBomMaterials: missingSubs.map((s) => s.material),
-          skipSourceCheck: Boolean(copyParams.sourceComponents && copyParams.sourceComponents.length > 0),
-          sourceComponents: copyParams.sourceComponents || []
+        // Post-execution recursive CS03 structural verification of all created BOMs
+        const hierarchyVerification = await verifyHierarchyStructure({
+          copyOrder,
+          targetPlant: copyParams.target?.plant,
+          bomUsage: copyParams.target?.bomUsage || '1'
         });
 
-        if (!result.success || result.verified === false) {
-          const err = new Error(result.message || 'Copy From BOM failed or could not be verified in SAP GUI.');
-          err.code = result.code || 'GUI_COPY_FAILED';
+        if (!hierarchyVerification.match && copySubBoms) {
+          const err = new Error(`Structural verification failed for BOM hierarchy: ${hierarchyVerification.summary}`);
+          err.code = 'STRUCTURAL_VERIFICATION_FAILED';
+          err.differences = hierarchyVerification.differences;
           throw err;
         }
 
-        createdRecords.push(result.after || {
-          material: copyParams.target?.material,
-          plant: copyParams.target?.plant,
-          bomUsage: copyParams.target?.bomUsage,
-          status: 'COPIED_AND_VERIFIED_VIA_GUI'
-        });
+        const mainRecord = createdRecords[createdRecords.length - 1] || {};
+        result = {
+          success: true,
+          verified: true,
+          status: (!copySubBoms && mainRecord.status === 'COPIED_WITH_WARNINGS_VIA_GUI') ? 'SUCCESS_WITH_WARNINGS' : 'SUCCESS',
+          warnings: mainRecord.warnings || [],
+          code: 'BOM_HIERARCHY_COPIED_AND_VERIFIED',
+          message: `Successfully copied complete BOM hierarchy for ${copyParams.target?.material} (${copyOrder.length} BOM${copyOrder.length > 1 ? 's' : ''} created bottom-up and verified in CS03).`,
+          after: mainRecord,
+          createdRecords,
+          verifiedBomsCount: hierarchyVerification.verifiedCount,
+          verification: hierarchyVerification
+        };
 
         if (result.status === 'SUCCESS_WITH_WARNINGS') {
           const warnTexts = (result.warnings || []).map((w) => w.reason || w);
           executedMessage = `BOM for ${copyParams.target?.material} created in plant ${copyParams.target?.plant} with warnings: ${warnTexts.join('; ')}`;
         } else {
-          const extraMsg = createdRecords.length > 1 ? ` (plus ${createdRecords.length - 1} prerequisite sub-BOMs)` : '';
-          executedMessage = result.message || `Successfully created BOM for ${copyParams.target?.material} in plant ${copyParams.target?.plant}${extraMsg} via SAP GUI.`;
+          executedMessage = result.message;
         }
 
         data = createdRecords;
@@ -1436,20 +1458,22 @@ router.post('/', async (req, res) => {
         throw new Error(`Unknown action type: ${action.type}`);
       }
 
-      // Mandatory Audit Logging
-      auditLogger.logAction({
-        sapUsername: username,
-        entityKey,
-        actionType: action.type,
-        recordId: recordId || result.after?.[schema?.idField],
-        businessPartnerId: recordId || result.after?.[schema?.idField],
-        beforeValues: result.before,
-        afterValues: result.after,
-        sourcePrompt: action.sourcePrompt,
-        actionId: action.actionId,
-        system: actionSystem,
-        reason: providedReason || null
-      });
+      // Mandatory Audit Logging (for copy_bom, each BOM in the hierarchy is already logged individually above)
+      if (action.type !== 'copy_bom') {
+        auditLogger.logAction({
+          sapUsername: username,
+          entityKey,
+          actionType: action.type,
+          recordId: recordId || result.after?.[schema?.idField],
+          businessPartnerId: recordId || result.after?.[schema?.idField],
+          beforeValues: result.before,
+          afterValues: result.after,
+          sourcePrompt: action.sourcePrompt,
+          actionId: action.actionId,
+          system: actionSystem,
+          reason: providedReason || null
+        });
+      }
 
       // Clear the action from pending store
       pendingActionStore.clearPendingAction(actionId);
@@ -1544,7 +1568,10 @@ router.post('/', async (req, res) => {
     }
 
     const clean = validation.cleanParams;
-    const summary = `Copy BOM from Material ${clean.sourceMaterial} Plant ${clean.sourcePlant} Usage ${clean.sourceUsage} → to Material ${clean.targetMaterial} Plant ${clean.targetPlant} Usage ${clean.targetUsage}`;
+    const hier = validation.hierarchy;
+    const summary = hier?.metrics?.totalBomsToCreate > 1
+      ? `Copy BOM Hierarchy (${hier.metrics.totalBomsToCreate} BOMs): ${clean.sourceMaterial} (${clean.sourcePlant}) → ${clean.targetMaterial} (${clean.targetPlant}, Alt ${clean.targetAltBom})`
+      : `Copy BOM from Material ${clean.sourceMaterial} Plant ${clean.sourcePlant} Usage ${clean.sourceUsage} → to Material ${clean.targetMaterial} Plant ${clean.targetPlant} Usage ${clean.targetUsage}`;
 
     const preview = {
       entityKey: 'bom',
@@ -1559,6 +1586,10 @@ router.post('/', async (req, res) => {
       targetUsage: clean.targetUsage,
       targetAltBom: clean.targetAltBom,
       validFrom,
+      hierarchy: hier,
+      copyOrder: hier?.copyOrder || validation.copyOrder || [],
+      hierarchyMetrics: hier?.metrics,
+      formattedTree: hier?.tree ? formatHierarchyTree(hier.tree) : '',
       fields: {
         'Target Material': clean.targetMaterial,
         'Target Plant': clean.targetPlant,
@@ -1589,6 +1620,8 @@ router.post('/', async (req, res) => {
       },
       sourceComponents: clean.sourceComponents || [],
       availableAlternatives: validation.availableAlternatives || [],
+      hierarchy: hier,
+      copyOrder: hier?.copyOrder || validation.copyOrder || [],
       subBomDependencies: validation.subBomDependencies
     };
 
@@ -1945,7 +1978,11 @@ router.post('/', async (req, res) => {
             }
 
             const clean = validation.cleanParams;
-            const summary = `Copy BOM from Material ${clean.sourceMaterial} Plant ${clean.sourcePlant} Usage ${clean.sourceUsage} → to Material ${clean.targetMaterial} Plant ${clean.targetPlant} Usage ${clean.targetUsage}`;
+            const hier = validation.hierarchy;
+            const summary = hier?.metrics?.totalBomsToCreate > 1
+              ? `Copy BOM Hierarchy (${hier.metrics.totalBomsToCreate} BOMs): ${clean.sourceMaterial} (${clean.sourcePlant}) → ${clean.targetMaterial} (${clean.targetPlant}, Alt ${clean.targetAltBom})`
+              : `Copy BOM from Material ${clean.sourceMaterial} Plant ${clean.sourcePlant} Usage ${clean.sourceUsage} → to Material ${clean.targetMaterial} Plant ${clean.targetPlant} Usage ${clean.targetUsage}`;
+
             const preview = {
               entityKey: 'bom',
               entityLabel: 'Bill of Materials',
@@ -1953,24 +1990,34 @@ router.post('/', async (req, res) => {
               sourceMaterial: clean.sourceMaterial,
               sourcePlant: clean.sourcePlant,
               sourceUsage: clean.sourceUsage,
+              sourceAltBom: clean.sourceAltBom,
               targetMaterial: clean.targetMaterial,
               targetPlant: clean.targetPlant,
               targetUsage: clean.targetUsage,
+              targetAltBom: clean.targetAltBom,
+              hierarchy: hier,
+              copyOrder: hier?.copyOrder || validation.copyOrder || [],
+              hierarchyMetrics: hier?.metrics,
+              formattedTree: hier?.tree ? formatHierarchyTree(hier.tree) : '',
               fields: {
                 'Target Material': clean.targetMaterial,
                 'Target Plant': clean.targetPlant,
                 'Target Usage': clean.targetUsage,
+                'Target Alternative BOM': clean.targetAltBom || 'Default',
                 'Source Material': clean.sourceMaterial,
                 'Source Plant': clean.sourcePlant,
-                'Source Usage': clean.sourceUsage
+                'Source Usage': clean.sourceUsage,
+                'Source Alternative BOM': clean.sourceAltBom || 'Default'
               },
               subBomDependencies: validation.subBomDependencies
             };
             const payload = {
-              source: { material: clean.sourceMaterial, plant: clean.sourcePlant, bomUsage: clean.sourceUsage },
-              target: { material: clean.targetMaterial, plant: clean.targetPlant, bomUsage: clean.targetUsage },
+              source: { material: clean.sourceMaterial, plant: clean.sourcePlant, bomUsage: clean.sourceUsage, alternativeBom: clean.sourceAltBom },
+              target: { material: clean.targetMaterial, plant: clean.targetPlant, bomUsage: clean.targetUsage, alternativeBom: clean.targetAltBom },
               sourceComponents: clean.sourceComponents || [],
               availableAlternatives: validation.availableAlternatives || [],
+              hierarchy: hier,
+              copyOrder: hier?.copyOrder || validation.copyOrder || [],
               subBomDependencies: validation.subBomDependencies
             };
             const pending = pendingActionStore.createPendingAction({
@@ -2301,7 +2348,11 @@ router.post('/', async (req, res) => {
                 }
 
                 const clean = validation.cleanParams;
-                const summary = `Copy BOM from Material ${clean.sourceMaterial} Plant ${clean.sourcePlant} Usage ${clean.sourceUsage} → to Material ${clean.targetMaterial} Plant ${clean.targetPlant} Usage ${clean.targetUsage}`;
+                const hier = validation.hierarchy;
+                const summary = hier?.metrics?.totalBomsToCreate > 1
+                  ? `Copy BOM Hierarchy (${hier.metrics.totalBomsToCreate} BOMs): ${clean.sourceMaterial} (${clean.sourcePlant}) → ${clean.targetMaterial} (${clean.targetPlant}, Alt ${clean.targetAltBom})`
+                  : `Copy BOM from Material ${clean.sourceMaterial} Plant ${clean.sourcePlant} Usage ${clean.sourceUsage} → to Material ${clean.targetMaterial} Plant ${clean.targetPlant} Usage ${clean.targetUsage}`;
+
                 const preview = {
                   entityKey: 'bom',
                   entityLabel: 'Bill of Materials',
@@ -2309,25 +2360,35 @@ router.post('/', async (req, res) => {
                   sourceMaterial: clean.sourceMaterial,
                   sourcePlant: clean.sourcePlant,
                   sourceUsage: clean.sourceUsage,
+                  sourceAltBom: clean.sourceAltBom,
                   targetMaterial: clean.targetMaterial,
                   targetPlant: clean.targetPlant,
                   targetUsage: clean.targetUsage,
+                  targetAltBom: clean.targetAltBom,
+                  hierarchy: hier,
+                  copyOrder: hier?.copyOrder || validation.copyOrder || [],
+                  hierarchyMetrics: hier?.metrics,
+                  formattedTree: hier?.tree ? formatHierarchyTree(hier.tree) : '',
                   fields: {
                     'Target Material': clean.targetMaterial,
                     'Target Plant': clean.targetPlant,
                     'Target Usage': clean.targetUsage,
+                    'Target Alternative BOM': clean.targetAltBom || 'Default',
                     'Source Material': clean.sourceMaterial,
                     'Source Plant': clean.sourcePlant,
-                    'Source Usage': clean.sourceUsage
+                    'Source Usage': clean.sourceUsage,
+                    'Source Alternative BOM': clean.sourceAltBom || 'Default'
                   },
                   subBomDependencies: validation.subBomDependencies
                 };
 
                 const payload = {
-                  source: { material: clean.sourceMaterial, plant: clean.sourcePlant, bomUsage: clean.sourceUsage },
-                  target: { material: clean.targetMaterial, plant: clean.targetPlant, bomUsage: clean.targetUsage },
+                  source: { material: clean.sourceMaterial, plant: clean.sourcePlant, bomUsage: clean.sourceUsage, alternativeBom: clean.sourceAltBom },
+                  target: { material: clean.targetMaterial, plant: clean.targetPlant, bomUsage: clean.targetUsage, alternativeBom: clean.targetAltBom },
                   sourceComponents: clean.sourceComponents || [],
                   availableAlternatives: validation.availableAlternatives || [],
+                  hierarchy: hier,
+                  copyOrder: hier?.copyOrder || validation.copyOrder || [],
                   subBomDependencies: validation.subBomDependencies
                 };
 
@@ -2487,7 +2548,10 @@ router.post('/', async (req, res) => {
             }
 
             const clean = validation.cleanParams;
-            const summary = `Copy BOM from Material ${clean.sourceMaterial} Plant ${clean.sourcePlant} Usage ${clean.sourceUsage} → to Material ${clean.targetMaterial} Plant ${clean.targetPlant} Usage ${clean.targetUsage}`;
+            const hier = validation.hierarchy;
+            const summary = hier?.metrics?.totalBomsToCreate > 1
+              ? `Copy BOM Hierarchy (${hier.metrics.totalBomsToCreate} BOMs): ${clean.sourceMaterial} (${clean.sourcePlant}) → ${clean.targetMaterial} (${clean.targetPlant}, Alt ${clean.targetAltBom})`
+              : `Copy BOM from Material ${clean.sourceMaterial} Plant ${clean.sourcePlant} Usage ${clean.sourceUsage} → to Material ${clean.targetMaterial} Plant ${clean.targetPlant} Usage ${clean.targetUsage}`;
 
             const preview = {
               entityKey: 'bom',
@@ -2502,13 +2566,19 @@ router.post('/', async (req, res) => {
               targetUsage: clean.targetUsage,
               targetAltBom: clean.targetAltBom,
               validFrom,
+              hierarchy: hier,
+              copyOrder: hier?.copyOrder || validation.copyOrder || [],
+              hierarchyMetrics: hier?.metrics,
+              formattedTree: hier?.tree ? formatHierarchyTree(hier.tree) : '',
               fields: {
                 'Target Material': clean.targetMaterial,
                 'Target Plant': clean.targetPlant,
                 'Target Usage': clean.targetUsage,
+                'Target Alternative BOM': clean.targetAltBom || 'Default',
                 'Source Material': clean.sourceMaterial,
                 'Source Plant': clean.sourcePlant,
                 'Source Usage': clean.sourceUsage,
+                'Source Alternative BOM': clean.sourceAltBom || 'Default',
                 ...(validFrom ? { 'Valid From': validFrom } : {})
               },
               subBomDependencies: validation.subBomDependencies
@@ -2530,6 +2600,8 @@ router.post('/', async (req, res) => {
               },
               sourceComponents: clean.sourceComponents || [],
               availableAlternatives: validation.availableAlternatives || [],
+              hierarchy: hier,
+              copyOrder: hier?.copyOrder || validation.copyOrder || [],
               subBomDependencies: validation.subBomDependencies
             };
 
