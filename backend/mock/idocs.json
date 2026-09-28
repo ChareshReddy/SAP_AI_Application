@@ -1,0 +1,99 @@
+[
+  {
+    "idocNumber": "0000000000109201",
+    "idocType": "ORDERS05",
+    "direction": "INBOUND",
+    "status": "51-Error",
+    "partner": "CUST_WALMART",
+    "createdAt": "2026-09-23T04:10:00Z",
+    "errorLog": [
+      {
+        "segment": "EDI_DC40",
+        "message": "Temporary connection loss to SAP gateway during IDoc packet receipt"
+      }
+    ]
+  },
+  {
+    "idocNumber": "0000000000109202",
+    "idocType": "INVOIC02",
+    "direction": "OUTBOUND",
+    "status": "51-Error",
+    "partner": "VEND_BOSCH",
+    "createdAt": "2026-09-23T04:30:00Z",
+    "errorLog": [
+      {
+        "segment": "EDI_DC40",
+        "message": "Partner profile missing in WE20 for partner VEND_BOSCH message INVOIC"
+      }
+    ]
+  },
+  {
+    "idocNumber": "0000000000109203",
+    "idocType": "DESADV01",
+    "direction": "INBOUND",
+    "status": "51-Error",
+    "partner": "LOG_DHL",
+    "createdAt": "2026-09-23T05:00:00Z",
+    "errorLog": [
+      {
+        "segment": "E1EDL20",
+        "message": "Segment mapping error: Segment E1EDL20 missing mandatory field VBELN"
+      }
+    ]
+  },
+  {
+    "idocNumber": "0000000000109204",
+    "idocType": "ORDERS05",
+    "direction": "INBOUND",
+    "status": "51-Error",
+    "partner": "CUST_TARGET",
+    "createdAt": "2026-09-23T05:15:00Z",
+    "errorLog": [
+      {
+        "segment": "E1EDK01",
+        "message": "Lock wait timeout exceeded during material reservation; partner system busy"
+      }
+    ]
+  },
+  {
+    "idocNumber": "0000000000109205",
+    "idocType": "MATMAS05",
+    "direction": "INBOUND",
+    "status": "53-Successful",
+    "partner": "SAP_PLANT_10",
+    "createdAt": "2026-09-23T05:45:00Z",
+    "errorLog": []
+  },
+  {
+    "idocNumber": "0000000000109206",
+    "idocType": "ORDERS05",
+    "direction": "INBOUND",
+    "status": "64-Waiting",
+    "partner": "CUST_AMAZON",
+    "createdAt": "2026-09-23T06:00:00Z",
+    "errorLog": []
+  },
+  {
+    "idocNumber": "0000000000109207",
+    "idocType": "INVOIC02",
+    "direction": "OUTBOUND",
+    "status": "03-Sent",
+    "partner": "VEND_SIEMENS",
+    "createdAt": "2026-09-23T06:10:00Z",
+    "errorLog": []
+  },
+  {
+    "idocNumber": "0000000000109208",
+    "idocType": "ORDERS05",
+    "direction": "INBOUND",
+    "status": "51-Error",
+    "partner": "CUST_HOMEDEPOT",
+    "createdAt": "2026-09-23T06:30:00Z",
+    "errorLog": [
+      {
+        "segment": "E1EDP01",
+        "message": "Remote RFC communication failure during BAPI_SALESORDER_CREATEFROMDAT2 call"
+      }
+    ]
+  }
+]

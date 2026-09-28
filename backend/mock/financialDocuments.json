@@ -1,0 +1,60 @@
+[
+  {
+    "documentNumber": "1900000001",
+    "companyCode": "1000",
+    "fiscalYear": "2026",
+    "docType": "SA",
+    "postingDate": "2026-09-20",
+    "documentDate": "2026-09-20",
+    "currency": "EUR",
+    "totalAmount": 75000.00,
+    "headerText": "Monthly Server Depreciation Accrual",
+    "status": "POSTED",
+    "enteredBy": "FI_ADMIN",
+    "items": [
+      {
+        "itemNumber": "001",
+        "glAccount": "400100",
+        "debitCredit": "S",
+        "amount": 75000.00,
+        "costCenter": "CC-IT-OPS"
+      },
+      {
+        "itemNumber": "002",
+        "glAccount": "170100",
+        "debitCredit": "H",
+        "amount": 75000.00,
+        "costCenter": null
+      }
+    ]
+  },
+  {
+    "documentNumber": "1900000002",
+    "companyCode": "1000",
+    "fiscalYear": "2026",
+    "docType": "AB",
+    "postingDate": "2026-09-22",
+    "documentDate": "2026-09-22",
+    "currency": "EUR",
+    "totalAmount": 12850.00,
+    "headerText": "Vendor Clearing Adjustment",
+    "status": "POSTED",
+    "enteredBy": "FI_SPECIALIST",
+    "items": [
+      {
+        "itemNumber": "001",
+        "glAccount": "211000",
+        "debitCredit": "S",
+        "amount": 12850.00,
+        "costCenter": null
+      },
+      {
+        "itemNumber": "002",
+        "glAccount": "113100",
+        "debitCredit": "H",
+        "amount": 12850.00,
+        "costCenter": null
+      }
+    ]
+  }
+]

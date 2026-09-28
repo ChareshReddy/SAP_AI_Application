@@ -1,0 +1,112 @@
+[
+  {
+    "logId": "LOG_2001",
+    "object": "SD_ORDER",
+    "subObject": "VALIDATION",
+    "severity": "ERROR",
+    "message": "Customer credit limit exceeded by $42,500 for customer 100023",
+    "timestamp": "2026-09-23T03:15:22Z",
+    "transactionCode": "VA01",
+    "user": "SCHMIDT_M"
+  },
+  {
+    "logId": "LOG_2002",
+    "object": "FI_POSTING",
+    "subObject": "RECON",
+    "severity": "ERROR",
+    "message": "Posting period 09 is closed for company code 1000 account type S",
+    "timestamp": "2026-09-23T03:45:10Z",
+    "transactionCode": "FB01",
+    "user": "FISCHER_K"
+  },
+  {
+    "logId": "LOG_2003",
+    "object": "MM_INVOICE",
+    "subObject": "GOODS_RECEIPT",
+    "severity": "WARNING",
+    "message": "Quantity tolerance of 5% exceeded for PO item 4500019283/00010",
+    "timestamp": "2026-09-23T04:00:15Z",
+    "transactionCode": "MIRO",
+    "user": "WEBER_A"
+  },
+  {
+    "logId": "LOG_2004",
+    "object": "BC_BATCH",
+    "subObject": "MONITOR",
+    "severity": "ERROR",
+    "message": "Background job Z_BILLING_RUN_DAILY terminated due to lock conflict on table VBRK",
+    "timestamp": "2026-09-23T04:12:00Z",
+    "transactionCode": "SM37",
+    "user": "BATCH_ADM"
+  },
+  {
+    "logId": "LOG_2005",
+    "object": "SD_ORDER",
+    "subObject": "PRICING",
+    "severity": "WARNING",
+    "message": "Pricing condition PR00 missing mandatory scale value; defaulting to base rate",
+    "timestamp": "2026-09-23T04:25:30Z",
+    "transactionCode": "VA01",
+    "user": "SCHMIDT_M"
+  },
+  {
+    "logId": "LOG_2006",
+    "object": "BC_BATCH",
+    "subObject": "SCHEDULING",
+    "severity": "INFO",
+    "message": "Batch job Z_STOCK_REVAL completed successfully in 124 seconds",
+    "timestamp": "2026-09-23T04:40:00Z",
+    "transactionCode": "SM37",
+    "user": "BATCH_ADM"
+  },
+  {
+    "logId": "LOG_2007",
+    "object": "FI_POSTING",
+    "subObject": "PAYMENT",
+    "severity": "ERROR",
+    "message": "House bank US01 account 110293 has insufficient clearing balance for wire transfer",
+    "timestamp": "2026-09-23T05:05:12Z",
+    "transactionCode": "F110",
+    "user": "MEYER_T"
+  },
+  {
+    "logId": "LOG_2008",
+    "object": "MM_INVOICE",
+    "subObject": "TAX",
+    "severity": "INFO",
+    "message": "Vertex tax engine calculated line taxes successfully for invoice doc 5105600120",
+    "timestamp": "2026-09-23T05:18:45Z",
+    "transactionCode": "MIRO",
+    "user": "WEBER_A"
+  },
+  {
+    "logId": "LOG_2009",
+    "object": "BC_IDOC",
+    "subObject": "INBOUND",
+    "severity": "ERROR",
+    "message": "Inbound IDoc 0000000000109201 syntax check failed: temporary gateway timeout",
+    "timestamp": "2026-09-23T05:22:00Z",
+    "transactionCode": "WE02",
+    "user": "EDI_USER"
+  },
+  {
+    "logId": "LOG_2010",
+    "object": "SD_ORDER",
+    "subObject": "DELIVERY",
+    "severity": "INFO",
+    "message": "Outbound delivery 80004921 generated for sales order 1002934",
+    "timestamp": "2026-09-23T05:30:10Z",
+    "transactionCode": "VL01N",
+    "user": "KLEIN_E"
+  },
+  {
+    "logId": "LOG_2011",
+    "object": "FI_POSTING",
+    "subObject": "ASSET",
+    "severity": "WARNING",
+    "message": "Depreciation run AFAB posted with 2 minor rounding variances under $1.00",
+    "timestamp": "2026-09-23T05:45:00Z",
+    "transactionCode": "AFAB",
+    "user": "FISCHER_K"
+  }
+]

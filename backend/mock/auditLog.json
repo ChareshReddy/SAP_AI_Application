@@ -1,0 +1,66 @@
+[
+  {
+    "logId": "audit_1790583338630_4ee3b327",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "C1BH0214C",
+    "businessPartnerId": "C1BH0214C",
+    "task": "Sub-BOM Copy (C1BH0214C)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom C1BH0214C",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "C1BH0214C",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "1",
+      "sourceReference": {
+        "material": "C1BH0214C",
+        "plant": "1001",
+        "bomUsage": "1",
+        "alternativeBom": ""
+      },
+      "components": [
+        {
+          "item": "0010",
+          "material": "C2BH0214C",
+          "description": "CURED STRAP BAHAMAS 214",
+          "quantity": "1",
+          "unit": "PAA",
+          "itemCategory": "L",
+          "assembly": true
+        }
+      ],
+      "warnings": [],
+      "verifiedInSap": true,
+      "verifiedComponent": "C2BH0214C",
+      "verifiedQty": "1",
+      "verifiedItemCategory": "L",
+      "validationEntersCount": 1,
+      "status": "COPIED_AND_VERIFIED_VIA_GUI",
+      "guiMessage": "Creating BOM for material C1BH0214C (Acknowledged 1 storage location validation messages) [Verified in CS03: Component C2BH0214C (Qty 1, Category L) confirmed saved]",
+      "capturedControls": {
+        "copyButton": "wnd[0]/tbar[1]/btn[7]",
+        "popupTitle": "Copy From ...",
+        "refMaterialField": "wnd[1]/usr/ctxtRC29N-MATNR",
+        "refPlantField": "wnd[1]/usr/ctxtRC29N-WERKS",
+        "refUsageField": "wnd[1]/usr/ctxtRC29N-STLAN",
+        "refAltBomField": "wnd[1]/usr/txtRC29N-STLAL",
+        "popupConfirmButton": "wnd[1]/tbar[0]/btn[0]"
+      },
+      "createdAt": "2026-09-28T08:15:38.630Z"
+    },
+    "sourcePrompt": "Prerequisite sub-BOM copy for main BOM A1BH0214C",
+    "actionId": "act_1790583309950_ad5c3fe5_sub_C1BH0214C",
+    "timestamp": "2026-09-28T08:15:38.630Z"
+  }
+]

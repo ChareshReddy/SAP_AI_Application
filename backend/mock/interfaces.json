@@ -1,0 +1,82 @@
+[
+  {
+    "interfaceId": "IF_101",
+    "interfaceName": "SALES_ORDER_CPI_SYNC",
+    "sourceSystem": "SAP_S4HANA",
+    "targetSystem": "SALESFORCE_CRM",
+    "status": "FAILED",
+    "lastRunTime": "2026-09-23T04:15:00Z",
+    "messageCount": 142,
+    "failureReason": "Temporary HTTP 504 Gateway Timeout while contacting SAP CPI"
+  },
+  {
+    "interfaceId": "IF_102",
+    "interfaceName": "BANK_PAYMENT_SFTP",
+    "sourceSystem": "SAP_S4HANA",
+    "targetSystem": "JPMORGAN_SFTP",
+    "status": "FAILED",
+    "lastRunTime": "2026-09-23T04:30:00Z",
+    "messageCount": 28,
+    "failureReason": "SFTP connection lost to bank clearing house during payment file transfer"
+  },
+  {
+    "interfaceId": "IF_103",
+    "interfaceName": "SUPPLIER_CATALOG_AIF",
+    "sourceSystem": "ARIBA_NETWORK",
+    "targetSystem": "SAP_S4HANA",
+    "status": "FAILED",
+    "lastRunTime": "2026-09-23T04:50:00Z",
+    "messageCount": 850,
+    "failureReason": "Certificate expired on target endpoint: SSL handshake failed"
+  },
+  {
+    "interfaceId": "IF_104",
+    "interfaceName": "CUSTOMER_INVOICE_REST",
+    "sourceSystem": "SAP_S4HANA",
+    "targetSystem": "BILLING_PORTAL",
+    "status": "FAILED",
+    "lastRunTime": "2026-09-23T05:05:00Z",
+    "messageCount": 64,
+    "failureReason": "Schema validation failed: Missing tax jurisdiction code in invoice payload"
+  },
+  {
+    "interfaceId": "IF_105",
+    "interfaceName": "INVENTORY_AVAILABILITY_ODATA",
+    "sourceSystem": "SAP_S4HANA",
+    "targetSystem": "ECOMMERCE_WEB",
+    "status": "SUCCESS",
+    "lastRunTime": "2026-09-23T05:15:00Z",
+    "messageCount": 1205,
+    "failureReason": null
+  },
+  {
+    "interfaceId": "IF_106",
+    "interfaceName": "EMPLOYEE_MASTER_SUCCESSFACTORS",
+    "sourceSystem": "SUCCESSFACTORS",
+    "targetSystem": "SAP_S4HANA",
+    "status": "SUCCESS",
+    "lastRunTime": "2026-09-23T05:20:00Z",
+    "messageCount": 312,
+    "failureReason": null
+  },
+  {
+    "interfaceId": "IF_107",
+    "interfaceName": "SHIPMENT_STATUS_WEBHOOK",
+    "sourceSystem": "FEDEX_TRACKING",
+    "targetSystem": "SAP_S4HANA",
+    "status": "PENDING",
+    "lastRunTime": "2026-09-23T05:28:00Z",
+    "messageCount": 45,
+    "failureReason": null
+  },
+  {
+    "interfaceId": "IF_108",
+    "interfaceName": "WAREHOUSE_TRANSFER_KAFKA",
+    "sourceSystem": "SAP_EWM",
+    "targetSystem": "CENTRAL_DATA_LAKE",
+    "status": "FAILED",
+    "lastRunTime": "2026-09-23T05:35:00Z",
+    "messageCount": 520,
+    "failureReason": "Temporary connection loss to Kafka broker topic sap.ewm.transfers: timeout"
+  }
+]

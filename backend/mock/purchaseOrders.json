@@ -1,0 +1,71 @@
+[
+  {
+    "poNumber": "4500000001",
+    "vendor": "1000",
+    "vendorName": "SAP SE",
+    "docDate": "2026-09-20",
+    "companyCode": "1000",
+    "purchasingOrg": "1000",
+    "totalAmount": 125000.00,
+    "currency": "EUR",
+    "status": "AWAITING_RELEASE",
+    "releaseStatus": "BLOCKED",
+    "releaseCode": "L3",
+    "items": [
+      {
+        "itemNumber": "00010",
+        "material": "MAT-9001",
+        "description": "High Performance Server Rack",
+        "quantity": 5,
+        "unit": "EA",
+        "netPrice": 25000.00
+      }
+    ]
+  },
+  {
+    "poNumber": "4500000002",
+    "vendor": "1001",
+    "vendorName": "Walldorf IT Solutions GmbH",
+    "docDate": "2026-09-21",
+    "companyCode": "1000",
+    "purchasingOrg": "1000",
+    "totalAmount": 48200.50,
+    "currency": "EUR",
+    "status": "AWAITING_RELEASE",
+    "releaseStatus": "BLOCKED",
+    "releaseCode": "L3",
+    "items": [
+      {
+        "itemNumber": "00010",
+        "material": "MAT-2004",
+        "description": "Enterprise Network Switch",
+        "quantity": 10,
+        "unit": "EA",
+        "netPrice": 4820.05
+      }
+    ]
+  },
+  {
+    "poNumber": "4500000003",
+    "vendor": "1002",
+    "vendorName": "Heidelberg Logistics AG",
+    "docDate": "2026-09-18",
+    "companyCode": "1000",
+    "purchasingOrg": "1000",
+    "totalAmount": 15400.00,
+    "currency": "EUR",
+    "status": "RELEASED",
+    "releaseStatus": "APPROVED",
+    "releaseCode": "L3",
+    "items": [
+      {
+        "itemNumber": "00010",
+        "material": "SRV-5010",
+        "description": "Logistics Freight Handling",
+        "quantity": 1,
+        "unit": "AU",
+        "netPrice": 15400.00
+      }
+    ]
+  }
+]

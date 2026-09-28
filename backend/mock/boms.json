@@ -1,0 +1,57 @@
+[
+  {
+    "material": "MAT-BOM-100",
+    "plant": "1000",
+    "bomUsage": "1",
+    "alternativeBom": "1",
+    "validFrom": "2026-09-01",
+    "description": "Standard Industrial Motor Assembly BOM",
+    "components": [
+      {
+        "itemCategory": "L",
+        "component": "COMP-MOTOR-01",
+        "description": "Electric Motor Core 15kW",
+        "quantity": 1,
+        "unit": "EA"
+      },
+      {
+        "itemCategory": "L",
+        "component": "COMP-STATOR-02",
+        "description": "Copper Stator Winding Set",
+        "quantity": 2,
+        "unit": "ST"
+      },
+      {
+        "itemCategory": "L",
+        "component": "COMP-BEARING-03",
+        "description": "Precision Roller Bearing 40mm",
+        "quantity": 4,
+        "unit": "EA"
+      }
+    ]
+  },
+  {
+    "material": "MAT-BOM-200",
+    "plant": "1000",
+    "bomUsage": "1",
+    "alternativeBom": "1",
+    "validFrom": "2026-09-15",
+    "description": "Hydraulic Pump Enclosure Subassembly",
+    "components": [
+      {
+        "itemCategory": "L",
+        "component": "COMP-PUMP-HOUSING",
+        "description": "Cast Iron Pump Housing",
+        "quantity": 1,
+        "unit": "EA"
+      },
+      {
+        "itemCategory": "L",
+        "component": "COMP-SEAL-RING",
+        "description": "Nitrile O-Ring Gasket 50mm",
+        "quantity": 6,
+        "unit": "EA"
+      }
+    ]
+  }
+]

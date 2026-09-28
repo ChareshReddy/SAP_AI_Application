@@ -1,0 +1,145 @@
+[
+  {
+    "id": "KB_001",
+    "category": "DATABASE_TIMEOUT",
+    "patternStr": "(?:database|db|hana|sql).*(?:timeout|connection|table lock|lock contention)|(?:timeout|connection lost|connection reset).*(?:database|db|hana|sql)",
+    "recommendedAction": "RETRY",
+    "riskLevel": 2,
+    "description": "Transient database connectivity timeout or lock contention. Safe to retry after connection stabilizes.",
+    "occurrenceCount": 268,
+    "successfulResolutionCount": 204,
+    "lastSeen": "2026-09-28T07:50:49.649Z"
+  },
+  {
+    "id": "KB_002",
+    "category": "RFC_COMMUNICATION_FAILURE",
+    "patternStr": "rfc.*(?:communication|failed|unreachable|connection loss|gateway)",
+    "recommendedAction": "RETRY",
+    "riskLevel": 2,
+    "description": "RFC remote destination or gateway temporarily unreachable. Transient network interruption; safe to retry.",
+    "occurrenceCount": 18,
+    "successfulResolutionCount": 16,
+    "lastSeen": "2026-09-23T03:30:00Z"
+  },
+  {
+    "id": "KB_003",
+    "category": "REMOTE_SYSTEM_UNAVAILABLE",
+    "patternStr": "(?:remote system|destination.*unavailable|host unreachable|503.*service unavailable)",
+    "recommendedAction": "RETRY",
+    "riskLevel": 2,
+    "description": "External endpoint or partner system temporarily unavailable (e.g. HTTP 503). Safe to retry.",
+    "occurrenceCount": 12,
+    "successfulResolutionCount": 11,
+    "lastSeen": "2026-09-22T22:10:00Z"
+  },
+  {
+    "id": "KB_004",
+    "category": "TEMPORARY_CONNECTION_LOSS",
+    "patternStr": "(?:temporary connection|connection loss|gateway timeout|http 504|endpoint unreachable)",
+    "recommendedAction": "RETRY",
+    "riskLevel": 2,
+    "description": "Transient network disconnection or gateway timeout during transmission. Safe to reprocess/retry after connectivity is restored.",
+    "occurrenceCount": 213,
+    "successfulResolutionCount": 151,
+    "lastSeen": "2026-09-28T07:50:48.200Z"
+  },
+  {
+    "id": "KB_005",
+    "category": "TRANSIENT_SYSTEM_BUSY",
+    "patternStr": "(?:lock wait timeout|partner system busy|system overloaded)",
+    "recommendedAction": "RETRY",
+    "riskLevel": 2,
+    "description": "Transient system resource congestion or lock wait timeout. Safe to reprocess/retry once lock clears.",
+    "occurrenceCount": 21,
+    "successfulResolutionCount": 19,
+    "lastSeen": "2026-09-23T02:00:00Z"
+  },
+  {
+    "id": "KB_006",
+    "category": "SFTP_CONNECTION_FAILURE",
+    "patternStr": "(?:sftp connection lost|sftp.*unreachable)",
+    "recommendedAction": "RETRY",
+    "riskLevel": 2,
+    "description": "SFTP file transfer interrupted by transient network drop. Safe to retry transfer.",
+    "occurrenceCount": 15,
+    "successfulResolutionCount": 14,
+    "lastSeen": "2026-09-22T19:40:00Z"
+  },
+  {
+    "id": "KB_007",
+    "category": "AUTHORIZATION_MISSING",
+    "patternStr": "(?:authorization missing|lacks required|no authorization|missing permission|pfcg|authorization object)",
+    "recommendedAction": "ESCALATE",
+    "riskLevel": 3,
+    "description": "User lacks required SAP authorization object or PFCG role. Automated retry will fail; requires escalation to SAP Security Team.",
+    "occurrenceCount": 9,
+    "successfulResolutionCount": 2,
+    "lastSeen": "2026-09-23T01:15:00Z"
+  },
+  {
+    "id": "KB_008",
+    "category": "DATA_INTEGRITY_CONFLICT",
+    "patternStr": "(?:duplicate record|duplicate key|reconciliation data inconsistency|unique constraint|manual review)",
+    "recommendedAction": "ESCALATE",
+    "riskLevel": 3,
+    "description": "Duplicate record or reconciliation conflict detected. Automated retry will fail; requires escalation to Functional Consultant for manual review.",
+    "occurrenceCount": 7,
+    "successfulResolutionCount": 1,
+    "lastSeen": "2026-09-22T14:30:00Z"
+  },
+  {
+    "id": "KB_009",
+    "category": "PARTNER_PROFILE_MISSING",
+    "patternStr": "(?:partner profile missing|we20|partner.*not found)",
+    "recommendedAction": "ESCALATE",
+    "riskLevel": 3,
+    "description": "Partner profile definition is missing in transaction WE20. Requires EDI Administrator configuration before reprocessing.",
+    "occurrenceCount": 14,
+    "successfulResolutionCount": 4,
+    "lastSeen": "2026-09-23T03:00:00Z"
+  },
+  {
+    "id": "KB_010",
+    "category": "IDOC_SEGMENT_MAPPING_ERROR",
+    "patternStr": "(?:segment mapping error|segment.*missing mandatory field|mapping error)",
+    "recommendedAction": "ESCALATE",
+    "riskLevel": 3,
+    "description": "IDoc segment is missing mandatory business fields or has mapping errors. Requires data correction before reprocessing.",
+    "occurrenceCount": 11,
+    "successfulResolutionCount": 3,
+    "lastSeen": "2026-09-22T11:20:00Z"
+  },
+  {
+    "id": "KB_011",
+    "category": "SECURITY_CERTIFICATE_ERROR",
+    "patternStr": "(?:certificate expired|ssl certificate|tls handshake failed)",
+    "recommendedAction": "ESCALATE",
+    "riskLevel": 3,
+    "description": "SSL/TLS certificate expired or invalid on communication endpoint. Requires Basis / Security team certificate renewal.",
+    "occurrenceCount": 5,
+    "successfulResolutionCount": 1,
+    "lastSeen": "2026-09-21T08:15:00Z"
+  },
+  {
+    "id": "KB_012",
+    "category": "PAYLOAD_VALIDATION_ERROR",
+    "patternStr": "(?:schema validation failed|missing.*jurisdiction|invalid xml|malformed payload)",
+    "recommendedAction": "ESCALATE",
+    "riskLevel": 3,
+    "description": "Interface message payload failed XML/JSON schema validation. Requires sender system payload correction.",
+    "occurrenceCount": 16,
+    "successfulResolutionCount": 5,
+    "lastSeen": "2026-09-23T02:45:00Z"
+  },
+  {
+    "id": "KB_013",
+    "category": "CRITICAL_SYSTEM_FAULT",
+    "patternStr": "(?:core dump|kernel panic|hardware fault|database corruption)",
+    "recommendedAction": "ESCALATE",
+    "riskLevel": 4,
+    "description": "Critical infrastructure failure or corruption detected. Automated remediation strictly forbidden; requires immediate Basis Team escalation.",
+    "occurrenceCount": 2,
+    "successfulResolutionCount": 0,
+    "lastSeen": "2026-09-15T10:00:00Z"
+  }
+]

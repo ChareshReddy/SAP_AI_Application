@@ -1,0 +1,1326 @@
+{
+  "d": {
+    "results": [
+      {
+        "BusinessPartner": "1000",
+        "BusinessPartnerName": "ABC Corp Solutions",
+        "BusinessPartnerCategory": "2",
+        "City": "Chennai",
+        "Country": "IN",
+        "StreetName": "Anna Salai, Mount Road",
+        "PostalCode": "600002",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1000",
+              "CityName": "Chennai",
+              "Country": "IN",
+              "StreetName": "Anna Salai, Mount Road",
+              "PostalCode": "600002"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1001",
+        "BusinessPartnerName": "SAP SE Global HQ",
+        "BusinessPartnerCategory": "2",
+        "City": "Walldorf",
+        "Country": "DE",
+        "StreetName": "Dietmar-Hopp-Allee 16",
+        "PostalCode": "69190",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1001",
+              "CityName": "Walldorf",
+              "Country": "DE",
+              "StreetName": "Dietmar-Hopp-Allee 16",
+              "PostalCode": "69190"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1002",
+        "BusinessPartnerName": "Acme Industrial Logistics",
+        "BusinessPartnerCategory": "2",
+        "City": "Chicago",
+        "Country": "US",
+        "StreetName": "100 N Michigan Avenue",
+        "PostalCode": "60601",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1002",
+              "CityName": "Chicago",
+              "Country": "US",
+              "StreetName": "100 N Michigan Avenue",
+              "PostalCode": "60601"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1003",
+        "BusinessPartnerName": "Tata Consultancy Enterprises",
+        "BusinessPartnerCategory": "2",
+        "City": "Mumbai",
+        "Country": "IN",
+        "StreetName": "Nariman Point, Marine Drive",
+        "PostalCode": "400021",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1003",
+              "CityName": "Mumbai",
+              "Country": "IN",
+              "StreetName": "Nariman Point, Marine Drive",
+              "PostalCode": "400021"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1004",
+        "BusinessPartnerName": "Tokyo Electron Dynamics",
+        "BusinessPartnerCategory": "2",
+        "City": "Tokyo",
+        "Country": "JP",
+        "StreetName": "3-1 Akasaka 5-chome",
+        "PostalCode": "107-6325",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1004",
+              "CityName": "Tokyo",
+              "Country": "JP",
+              "StreetName": "3-1 Akasaka 5-chome",
+              "PostalCode": "107-6325"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1005",
+        "BusinessPartnerName": "Nordic Clean Energy AB",
+        "BusinessPartnerCategory": "2",
+        "City": "Stockholm",
+        "Country": "SE",
+        "StreetName": "Hamngatan 15",
+        "PostalCode": "111 47",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1005",
+              "CityName": "Stockholm",
+              "Country": "SE",
+              "StreetName": "Hamngatan 15",
+              "PostalCode": "111 47"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1006",
+        "BusinessPartnerName": "Apex Financial Capital",
+        "BusinessPartnerCategory": "2",
+        "City": "London",
+        "Country": "GB",
+        "StreetName": "25 Bank Street, Canary Wharf",
+        "PostalCode": "E14 5JP",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1006",
+              "CityName": "London",
+              "Country": "GB",
+              "StreetName": "25 Bank Street, Canary Wharf",
+              "PostalCode": "E14 5JP"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1007",
+        "BusinessPartnerName": "Wipro Technologies Campus",
+        "BusinessPartnerCategory": "2",
+        "City": "Bengaluru",
+        "Country": "IN",
+        "StreetName": "Sarjapur Road, Doddakannelli",
+        "PostalCode": "560035",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1007",
+              "CityName": "Bengaluru",
+              "Country": "IN",
+              "StreetName": "Sarjapur Road, Doddakannelli",
+              "PostalCode": "560035"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1008",
+        "BusinessPartnerName": "Zurich Precision Instruments",
+        "BusinessPartnerCategory": "2",
+        "City": "Zurich",
+        "Country": "CH",
+        "StreetName": "Bahnhofstrasse 45",
+        "PostalCode": "8001",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1008",
+              "CityName": "Zurich",
+              "Country": "CH",
+              "StreetName": "Bahnhofstrasse 45",
+              "PostalCode": "8001"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1009",
+        "BusinessPartnerName": "Dr. Hans Mueller Consulting",
+        "BusinessPartnerCategory": "1",
+        "City": "Munich",
+        "Country": "DE",
+        "StreetName": "Maximilianstrasse 22",
+        "PostalCode": "80539",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1009",
+              "CityName": "Munich",
+              "Country": "DE",
+              "StreetName": "Maximilianstrasse 22",
+              "PostalCode": "80539"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1010",
+        "BusinessPartnerName": "Pacific Rim BioTech",
+        "BusinessPartnerCategory": "2",
+        "City": "Singapore",
+        "Country": "SG",
+        "StreetName": "1 Fusionopolis Way",
+        "PostalCode": "138632",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1010",
+              "CityName": "Singapore",
+              "Country": "SG",
+              "StreetName": "1 Fusionopolis Way",
+              "PostalCode": "138632"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1011",
+        "BusinessPartnerName": "Horizon Automotive Works",
+        "BusinessPartnerCategory": "2",
+        "City": "Detroit",
+        "Country": "US",
+        "StreetName": "300 Renaissance Center",
+        "PostalCode": "48243",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1011",
+              "CityName": "Detroit",
+              "Country": "US",
+              "StreetName": "300 Renaissance Center",
+              "PostalCode": "48243"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1012",
+        "BusinessPartnerName": "Lumiere Fashion & Luxury",
+        "BusinessPartnerCategory": "2",
+        "City": "Paris",
+        "Country": "FR",
+        "StreetName": "Avenue Montaigne 30",
+        "PostalCode": "75008",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1012",
+              "CityName": "Paris",
+              "Country": "FR",
+              "StreetName": "Avenue Montaigne 30",
+              "PostalCode": "75008"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1013",
+        "BusinessPartnerName": "Sydney Harbor Maritime Logistics",
+        "BusinessPartnerCategory": "2",
+        "City": "Sydney",
+        "Country": "AU",
+        "StreetName": "Circular Quay West 10",
+        "PostalCode": "2000",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1013",
+              "CityName": "Sydney",
+              "Country": "AU",
+              "StreetName": "Circular Quay West 10",
+              "PostalCode": "2000"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1014",
+        "BusinessPartnerName": "HCL Cloud Innovations",
+        "BusinessPartnerCategory": "2",
+        "City": "Noida",
+        "Country": "IN",
+        "StreetName": "Sector 126, Express Highway",
+        "PostalCode": "201304",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1014",
+              "CityName": "Noida",
+              "Country": "IN",
+              "StreetName": "Sector 126, Express Highway",
+              "PostalCode": "201304"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1015",
+        "BusinessPartnerName": "Maple Leaf Minerals Ltd",
+        "BusinessPartnerCategory": "2",
+        "City": "Toronto",
+        "Country": "CA",
+        "StreetName": "Bay Street 199",
+        "PostalCode": "M5L 1G9",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1015",
+              "CityName": "Toronto",
+              "Country": "CA",
+              "StreetName": "Bay Street 199",
+              "PostalCode": "M5L 1G9"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1016",
+        "BusinessPartnerName": "Milano Design Studio",
+        "BusinessPartnerCategory": "2",
+        "City": "Milan",
+        "Country": "IT",
+        "StreetName": "Via Montenapoleone 8",
+        "PostalCode": "20121",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1016",
+              "CityName": "Milan",
+              "Country": "IT",
+              "StreetName": "Via Montenapoleone 8",
+              "PostalCode": "20121"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1017",
+        "BusinessPartnerName": "Seoul Semiconductor Hub",
+        "BusinessPartnerCategory": "2",
+        "City": "Seoul",
+        "Country": "KR",
+        "StreetName": "Gangnam-daero 390",
+        "PostalCode": "06621",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1017",
+              "CityName": "Seoul",
+              "Country": "KR",
+              "StreetName": "Gangnam-daero 390",
+              "PostalCode": "06621"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1018",
+        "BusinessPartnerName": "Priya Sharma Legal Services",
+        "BusinessPartnerCategory": "1",
+        "City": "Hyderabad",
+        "Country": "IN",
+        "StreetName": "HITEC City, Madhapur",
+        "PostalCode": "500081",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1018",
+              "CityName": "Hyderabad",
+              "Country": "IN",
+              "StreetName": "HITEC City, Madhapur",
+              "PostalCode": "500081"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1019",
+        "BusinessPartnerName": "Dubai Oasis Trading FZCO",
+        "BusinessPartnerCategory": "2",
+        "City": "Dubai",
+        "Country": "AE",
+        "StreetName": "Sheikh Zayed Road, DIFC Tower 2",
+        "PostalCode": "PO 506500",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1019",
+              "CityName": "Dubai",
+              "Country": "AE",
+              "StreetName": "Sheikh Zayed Road, DIFC Tower 2",
+              "PostalCode": "PO 506500"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1020",
+        "BusinessPartnerName": "São Paulo AgriCorp",
+        "BusinessPartnerCategory": "2",
+        "City": "São Paulo",
+        "Country": "BR",
+        "StreetName": "Avenida Paulista 1200",
+        "PostalCode": "01310-100",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1020",
+              "CityName": "São Paulo",
+              "Country": "BR",
+              "StreetName": "Avenida Paulista 1200",
+              "PostalCode": "01310-100"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1021",
+        "BusinessPartnerName": "Berlin Quantum Analytics",
+        "BusinessPartnerCategory": "2",
+        "City": "Berlin",
+        "Country": "DE",
+        "StreetName": "Friedrichstrasse 176",
+        "PostalCode": "10117",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1021",
+              "CityName": "Berlin",
+              "Country": "DE",
+              "StreetName": "Friedrichstrasse 176",
+              "PostalCode": "10117"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1022",
+        "BusinessPartnerName": "Silicon Valley Robotics",
+        "BusinessPartnerCategory": "2",
+        "City": "San Jose",
+        "Country": "US",
+        "StreetName": "100 Innovation Way",
+        "PostalCode": "95134",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1022",
+              "CityName": "San Jose",
+              "Country": "US",
+              "StreetName": "100 Innovation Way",
+              "PostalCode": "95134"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1023",
+        "BusinessPartnerName": "Larsen Engineering Solutions",
+        "BusinessPartnerCategory": "2",
+        "City": "Chennai",
+        "Country": "IN",
+        "StreetName": "OMR IT Expressway",
+        "PostalCode": "600096",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1023",
+              "CityName": "Chennai",
+              "Country": "IN",
+              "StreetName": "OMR IT Expressway",
+              "PostalCode": "600096"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1024",
+        "BusinessPartnerName": "Barcelona Renewable Solar",
+        "BusinessPartnerCategory": "2",
+        "City": "Barcelona",
+        "Country": "ES",
+        "StreetName": "Passeig de Gracia 44",
+        "PostalCode": "08007",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1024",
+              "CityName": "Barcelona",
+              "Country": "ES",
+              "StreetName": "Passeig de Gracia 44",
+              "PostalCode": "08007"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1025",
+        "BusinessPartnerName": "Amsterdam Canal Logistics",
+        "BusinessPartnerCategory": "2",
+        "City": "Amsterdam",
+        "Country": "NL",
+        "StreetName": "Keizersgracht 421",
+        "PostalCode": "1016 EK",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1025",
+              "CityName": "Amsterdam",
+              "Country": "NL",
+              "StreetName": "Keizersgracht 421",
+              "PostalCode": "1016 EK"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1026",
+        "BusinessPartnerName": "Arthur Pendelton & Sons",
+        "BusinessPartnerCategory": "1",
+        "City": "Edinburgh",
+        "Country": "GB",
+        "StreetName": "George Street 12",
+        "PostalCode": "EH2 2PF",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1026",
+              "CityName": "Edinburgh",
+              "Country": "GB",
+              "StreetName": "George Street 12",
+              "PostalCode": "EH2 2PF"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1027",
+        "BusinessPartnerName": "Adani Green Energy Port",
+        "BusinessPartnerCategory": "2",
+        "City": "Ahmedabad",
+        "Country": "IN",
+        "StreetName": "Shantigram, SG Highway",
+        "PostalCode": "382421",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1027",
+              "CityName": "Ahmedabad",
+              "Country": "IN",
+              "StreetName": "Shantigram, SG Highway",
+              "PostalCode": "382421"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1028",
+        "BusinessPartnerName": "Kyoto Ceramic Tech",
+        "BusinessPartnerCategory": "2",
+        "City": "Kyoto",
+        "Country": "JP",
+        "StreetName": "Takeda Tobadono-cho 6",
+        "PostalCode": "612-8501",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1028",
+              "CityName": "Kyoto",
+              "Country": "JP",
+              "StreetName": "Takeda Tobadono-cho 6",
+              "PostalCode": "612-8501"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1029",
+        "BusinessPartnerName": "Vienna Medical Systems",
+        "BusinessPartnerCategory": "2",
+        "City": "Vienna",
+        "Country": "AT",
+        "StreetName": "Ringstrasse 2",
+        "PostalCode": "1010",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1029",
+              "CityName": "Vienna",
+              "Country": "AT",
+              "StreetName": "Ringstrasse 2",
+              "PostalCode": "1010"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1030",
+        "BusinessPartnerName": "Reliance Digital Networks",
+        "BusinessPartnerCategory": "2",
+        "City": "Navi Mumbai",
+        "Country": "IN",
+        "StreetName": "Reliance Corporate Park, Ghansoli",
+        "PostalCode": "400701",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1030",
+              "CityName": "Navi Mumbai",
+              "Country": "IN",
+              "StreetName": "Reliance Corporate Park, Ghansoli",
+              "PostalCode": "400701"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1031",
+        "BusinessPartnerName": "Dublin Software Cloud",
+        "BusinessPartnerCategory": "2",
+        "City": "Dublin",
+        "Country": "IE",
+        "StreetName": "Grand Canal Dock, Barrow St",
+        "PostalCode": "D04 V4X7",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1031",
+              "CityName": "Dublin",
+              "Country": "IE",
+              "StreetName": "Grand Canal Dock, Barrow St",
+              "PostalCode": "D04 V4X7"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1032",
+        "BusinessPartnerName": "Austin Silicon Foundry",
+        "BusinessPartnerCategory": "2",
+        "City": "Austin",
+        "Country": "US",
+        "StreetName": "Congress Avenue 500",
+        "PostalCode": "78701",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1032",
+              "CityName": "Austin",
+              "Country": "US",
+              "StreetName": "Congress Avenue 500",
+              "PostalCode": "78701"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1033",
+        "BusinessPartnerName": "Geneva Private Wealth Group",
+        "BusinessPartnerCategory": "2",
+        "City": "Geneva",
+        "Country": "CH",
+        "StreetName": "Rue du Rhone 65",
+        "PostalCode": "1204",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1033",
+              "CityName": "Geneva",
+              "Country": "CH",
+              "StreetName": "Rue du Rhone 65",
+              "PostalCode": "1204"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1034",
+        "BusinessPartnerName": "Kolkata Marine Heavy Industries",
+        "BusinessPartnerCategory": "2",
+        "City": "Kolkata",
+        "Country": "IN",
+        "StreetName": "Strand Road, BBD Bagh",
+        "PostalCode": "700001",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1034",
+              "CityName": "Kolkata",
+              "Country": "IN",
+              "StreetName": "Strand Road, BBD Bagh",
+              "PostalCode": "700001"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1035",
+        "BusinessPartnerName": "Copenhagen Wind Turbines",
+        "BusinessPartnerCategory": "2",
+        "City": "Copenhagen",
+        "Country": "DK",
+        "StreetName": "Nyhavn 22",
+        "PostalCode": "1051",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1035",
+              "CityName": "Copenhagen",
+              "Country": "DK",
+              "StreetName": "Nyhavn 22",
+              "PostalCode": "1051"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1036",
+        "BusinessPartnerName": "Elena Rostova Import Export",
+        "BusinessPartnerCategory": "1",
+        "City": "Prague",
+        "Country": "CZ",
+        "StreetName": "Wenceslas Square 11",
+        "PostalCode": "110 00",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1036",
+              "CityName": "Prague",
+              "Country": "CZ",
+              "StreetName": "Wenceslas Square 11",
+              "PostalCode": "110 00"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1037",
+        "BusinessPartnerName": "Mahindra Aerospace Engineering",
+        "BusinessPartnerCategory": "2",
+        "City": "Pune",
+        "Country": "IN",
+        "StreetName": "Hinjawadi Phase 2",
+        "PostalCode": "411057",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1037",
+              "CityName": "Pune",
+              "Country": "IN",
+              "StreetName": "Hinjawadi Phase 2",
+              "PostalCode": "411057"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1038",
+        "BusinessPartnerName": "Helsinki Telecommunications Oy",
+        "BusinessPartnerCategory": "2",
+        "City": "Helsinki",
+        "Country": "FI",
+        "StreetName": "Mannerheimintie 14",
+        "PostalCode": "00100",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1038",
+              "CityName": "Helsinki",
+              "Country": "FI",
+              "StreetName": "Mannerheimintie 14",
+              "PostalCode": "00100"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1039",
+        "BusinessPartnerName": "Seattle Evergreen Logistics",
+        "BusinessPartnerCategory": "2",
+        "City": "Seattle",
+        "Country": "US",
+        "StreetName": "400 Pine Street",
+        "PostalCode": "98101",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1039",
+              "CityName": "Seattle",
+              "Country": "US",
+              "StreetName": "400 Pine Street",
+              "PostalCode": "98101"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1040",
+        "BusinessPartnerName": "Sun Pharma Scientific Labs",
+        "BusinessPartnerCategory": "2",
+        "City": "Vadodara",
+        "Country": "IN",
+        "StreetName": "Tandalja Road",
+        "PostalCode": "390012",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1040",
+              "CityName": "Vadodara",
+              "Country": "IN",
+              "StreetName": "Tandalja Road",
+              "PostalCode": "390012"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1041",
+        "BusinessPartnerName": "Auckland Geothermal Power",
+        "BusinessPartnerCategory": "2",
+        "City": "Auckland",
+        "Country": "NZ",
+        "StreetName": "Queen Street 120",
+        "PostalCode": "1010",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1041",
+              "CityName": "Auckland",
+              "Country": "NZ",
+              "StreetName": "Queen Street 120",
+              "PostalCode": "1010"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1042",
+        "BusinessPartnerName": "Johannesburg Mining Consortium",
+        "BusinessPartnerCategory": "2",
+        "City": "Johannesburg",
+        "Country": "ZA",
+        "StreetName": "Sandton Drive 44",
+        "PostalCode": "2196",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1042",
+              "CityName": "Johannesburg",
+              "Country": "ZA",
+              "StreetName": "Sandton Drive 44",
+              "PostalCode": "2196"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1043",
+        "BusinessPartnerName": "Bajaj Auto Manufacturing",
+        "BusinessPartnerCategory": "2",
+        "City": "Pune",
+        "Country": "IN",
+        "StreetName": "Akurdi Industrial Area",
+        "PostalCode": "411035",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1043",
+              "CityName": "Pune",
+              "Country": "IN",
+              "StreetName": "Akurdi Industrial Area",
+              "PostalCode": "411035"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1044",
+        "BusinessPartnerName": "Oslo Deep Sea Offshore",
+        "BusinessPartnerCategory": "2",
+        "City": "Oslo",
+        "Country": "NO",
+        "StreetName": "Karl Johans gate 25",
+        "PostalCode": "0159",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1044",
+              "CityName": "Oslo",
+              "Country": "NO",
+              "StreetName": "Karl Johans gate 25",
+              "PostalCode": "0159"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1045",
+        "BusinessPartnerName": "Hong Kong Victoria Trading",
+        "BusinessPartnerCategory": "2",
+        "City": "Hong Kong",
+        "Country": "HK",
+        "StreetName": "Connaught Road Central 88",
+        "PostalCode": "999077",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1045",
+              "CityName": "Hong Kong",
+              "Country": "HK",
+              "StreetName": "Connaught Road Central 88",
+              "PostalCode": "999077"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1046",
+        "BusinessPartnerName": "Lucas Silva Agronomy",
+        "BusinessPartnerCategory": "1",
+        "City": "Curitiba",
+        "Country": "BR",
+        "StreetName": "Rua XV de Novembro 500",
+        "PostalCode": "80020-310",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1046",
+              "CityName": "Curitiba",
+              "Country": "BR",
+              "StreetName": "Rua XV de Novembro 500",
+              "PostalCode": "80020-310"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1047",
+        "BusinessPartnerName": "Hero MotoCorp Logistics",
+        "BusinessPartnerCategory": "2",
+        "City": "Gurugram",
+        "Country": "IN",
+        "StreetName": "Udyog Vihar Phase 4",
+        "PostalCode": "122015",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1047",
+              "CityName": "Gurugram",
+              "Country": "IN",
+              "StreetName": "Udyog Vihar Phase 4",
+              "PostalCode": "122015"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1048",
+        "BusinessPartnerName": "Brussels European Logistics Hub",
+        "BusinessPartnerCategory": "2",
+        "City": "Brussels",
+        "Country": "BE",
+        "StreetName": "Boulevard du Regent 35",
+        "PostalCode": "1000",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1048",
+              "CityName": "Brussels",
+              "Country": "BE",
+              "StreetName": "Boulevard du Regent 35",
+              "PostalCode": "1000"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1049",
+        "BusinessPartnerName": "Boston BioHealth Innovations",
+        "BusinessPartnerCategory": "2",
+        "City": "Boston",
+        "Country": "US",
+        "StreetName": "Boylston Street 500",
+        "PostalCode": "02116",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1049",
+              "CityName": "Boston",
+              "Country": "US",
+              "StreetName": "Boylston Street 500",
+              "PostalCode": "02116"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1050",
+        "BusinessPartnerName": "Titan Industries Watch Division",
+        "BusinessPartnerCategory": "2",
+        "City": "Hosur",
+        "Country": "IN",
+        "StreetName": "SIPCOT Industrial Complex",
+        "PostalCode": "635126",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1050",
+              "CityName": "Hosur",
+              "Country": "IN",
+              "StreetName": "SIPCOT Industrial Complex",
+              "PostalCode": "635126"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1051",
+        "BusinessPartnerName": "Lisbon Maritime Logistics",
+        "BusinessPartnerCategory": "2",
+        "City": "Lisbon",
+        "Country": "PT",
+        "StreetName": "Avenida da Liberdade 180",
+        "PostalCode": "1250-146",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1051",
+              "CityName": "Lisbon",
+              "Country": "PT",
+              "StreetName": "Avenida da Liberdade 180",
+              "PostalCode": "1250-146"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1052",
+        "BusinessPartnerName": "Kobe Precision Steel Ltd",
+        "BusinessPartnerCategory": "2",
+        "City": "Kobe",
+        "Country": "JP",
+        "StreetName": "Wakinohama-Kaigandori 2",
+        "PostalCode": "651-8585",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1052",
+              "CityName": "Kobe",
+              "Country": "JP",
+              "StreetName": "Wakinohama-Kaigandori 2",
+              "PostalCode": "651-8585"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1053",
+        "BusinessPartnerName": "Ashok Leyland Heavy Vehicles",
+        "BusinessPartnerCategory": "2",
+        "City": "Chennai",
+        "Country": "IN",
+        "StreetName": "1 Sardar Patel Road, Guindy",
+        "PostalCode": "600032",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1053",
+              "CityName": "Chennai",
+              "Country": "IN",
+              "StreetName": "1 Sardar Patel Road, Guindy",
+              "PostalCode": "600032"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1054",
+        "BusinessPartnerName": "Vancouver Pacific Timber Corp",
+        "BusinessPartnerCategory": "2",
+        "City": "Vancouver",
+        "Country": "CA",
+        "StreetName": "Burrard Street 666",
+        "PostalCode": "V6C 2X8",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1054",
+              "CityName": "Vancouver",
+              "Country": "CA",
+              "StreetName": "Burrard Street 666",
+              "PostalCode": "V6C 2X8"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1055",
+        "BusinessPartnerName": "Marco Rossi Architecture",
+        "BusinessPartnerCategory": "1",
+        "City": "Florence",
+        "Country": "IT",
+        "StreetName": "Piazza del Duomo 14",
+        "PostalCode": "50122",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1055",
+              "CityName": "Florence",
+              "Country": "IT",
+              "StreetName": "Piazza del Duomo 14",
+              "PostalCode": "50122"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1056",
+        "BusinessPartnerName": "Cipla Pharmaceuticals India",
+        "BusinessPartnerCategory": "2",
+        "City": "Mumbai",
+        "Country": "IN",
+        "StreetName": "Peninsula Business Park, Lower Parel",
+        "PostalCode": "400013",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1056",
+              "CityName": "Mumbai",
+              "Country": "IN",
+              "StreetName": "Peninsula Business Park, Lower Parel",
+              "PostalCode": "400013"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1057",
+        "BusinessPartnerName": "Warsaw Digital Fintech Sp.",
+        "BusinessPartnerCategory": "2",
+        "City": "Warsaw",
+        "Country": "PL",
+        "StreetName": "Aleje Jerozolimskie 65",
+        "PostalCode": "00-697",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1057",
+              "CityName": "Warsaw",
+              "Country": "PL",
+              "StreetName": "Aleje Jerozolimskie 65",
+              "PostalCode": "00-697"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1058",
+        "BusinessPartnerName": "Dallas Lone Star Energy",
+        "BusinessPartnerCategory": "2",
+        "City": "Dallas",
+        "Country": "US",
+        "StreetName": "Elm Street 1700",
+        "PostalCode": "75201",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1058",
+              "CityName": "Dallas",
+              "Country": "US",
+              "StreetName": "Elm Street 1700",
+              "PostalCode": "75201"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1059",
+        "BusinessPartnerName": "TVS Motor Vehicle Company",
+        "BusinessPartnerCategory": "2",
+        "City": "Madurai",
+        "Country": "IN",
+        "StreetName": "Harita, Hosur & Madurai Bypass",
+        "PostalCode": "625010",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1059",
+              "CityName": "Madurai",
+              "Country": "IN",
+              "StreetName": "Harita, Hosur & Madurai Bypass",
+              "PostalCode": "625010"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1060",
+        "BusinessPartnerName": "Rotterdam Harbor Freight NV",
+        "BusinessPartnerCategory": "2",
+        "City": "Rotterdam",
+        "Country": "NL",
+        "StreetName": "Wilhelminakade 905",
+        "PostalCode": "3072 AP",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1060",
+              "CityName": "Rotterdam",
+              "Country": "NL",
+              "StreetName": "Wilhelminakade 905",
+              "PostalCode": "3072 AP"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1061",
+        "BusinessPartnerName": "Melbourne Grain & Agriculture",
+        "BusinessPartnerCategory": "2",
+        "City": "Melbourne",
+        "Country": "AU",
+        "StreetName": "Collins Street 500",
+        "PostalCode": "3000",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1061",
+              "CityName": "Melbourne",
+              "Country": "AU",
+              "StreetName": "Collins Street 500",
+              "PostalCode": "3000"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1062",
+        "BusinessPartnerName": "Dr. Kavita Nair Medical Research",
+        "BusinessPartnerCategory": "1",
+        "City": "Kochi",
+        "Country": "IN",
+        "StreetName": "Marine Drive Infopark",
+        "PostalCode": "682031",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1062",
+              "CityName": "Kochi",
+              "Country": "IN",
+              "StreetName": "Marine Drive Infopark",
+              "PostalCode": "682031"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1063",
+        "BusinessPartnerName": "Singapore Maritime Freightline",
+        "BusinessPartnerCategory": "2",
+        "City": "Singapore",
+        "Country": "SG",
+        "StreetName": "Marina Bay Financial Centre Tower 1",
+        "PostalCode": "018981",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1063",
+              "CityName": "Singapore",
+              "Country": "SG",
+              "StreetName": "Marina Bay Financial Centre Tower 1",
+              "PostalCode": "018981"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1064",
+        "BusinessPartnerName": "Munich Bavarian Tech AG",
+        "BusinessPartnerCategory": "2",
+        "City": "Munich",
+        "Country": "DE",
+        "StreetName": "Leopoldstrasse 88",
+        "PostalCode": "80802",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1064",
+              "CityName": "Munich",
+              "Country": "DE",
+              "StreetName": "Leopoldstrasse 88",
+              "PostalCode": "80802"
+            }
+          ]
+        }
+      },
+      {
+        "BusinessPartner": "1065",
+        "BusinessPartnerName": "Zeta Robotics Automation",
+        "BusinessPartnerCategory": "2",
+        "City": "Atlanta",
+        "Country": "US",
+        "StreetName": "Peachtree Street NE 100",
+        "PostalCode": "30303",
+        "to_BusinessPartnerAddress": {
+          "results": [
+            {
+              "AddressID": "ADDR-1065",
+              "CityName": "Atlanta",
+              "Country": "US",
+              "StreetName": "Peachtree Street NE 100",
+              "PostalCode": "30303"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
