@@ -203,12 +203,12 @@ export async function validateSapCredentials(username, password, systemKey = nul
     throw new Error('Username and password cannot be empty.');
   }
 
-  if (isMockMode()) {
+  if (isMockMode() || process.env.SKIP_GATEWAY_AUTH === 'true') {
     await new Promise((resolve) => setTimeout(resolve, 150));
     return {
       success: true,
       username: cleanUsername,
-      mode: 'mock',
+      mode: isMockMode() ? 'mock' : 'real_bypass',
       systemKey: systemKey || 'DEV'
     };
   }

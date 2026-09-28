@@ -1,17 +1,17 @@
 [
   {
-    "logId": "audit_1790593267292_e656fb85",
+    "logId": "audit_1790599518627_c03e3ea0",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
     "entityKey": "bom",
     "actionType": "copy_bom",
-    "recordId": "AUDIT_SUB",
-    "businessPartnerId": "AUDIT_SUB",
-    "task": "Sub-BOM Copy (AUDIT_SUB)",
+    "recordId": "A1BH0214C",
+    "businessPartnerId": "A1BH0214C",
+    "task": "Main BOM Copy (A1BH0214C)",
     "reason": null,
     "steps": [
-      "Initiated copy_bom action for bom AUDIT_SUB",
+      "Initiated copy_bom action for bom A1BH0214C",
       "Human confirmation verified",
       "Executed copy_bom successfully"
     ],
@@ -19,7 +19,7 @@
     "ticketId": null,
     "beforeValues": null,
     "afterValues": {
-      "material": "AUDIT_SUB",
+      "material": "A1BH0214C",
       "plant": "1012",
       "bomUsage": "1",
       "alternativeBom": "1",
@@ -27,33 +27,175 @@
       "components": [
         {
           "item": "0010",
-          "material": "RAW_A",
-          "quantity": "1",
+          "material": "B1BH0214C",
+          "description": "CUT SOLE BAHAMAS 214",
+          "quantity": "100",
+          "unit": "PAA",
+          "itemCategory": "L",
+          "assembly": true
+        },
+        {
+          "item": "0020",
+          "material": "C1BH0214C",
+          "description": "FIN. STRAP BAHAMAS 214",
+          "quantity": "100",
+          "unit": "PAA",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0030",
+          "material": "11021735",
+          "description": "INK EVA SCREEN PRINTING BLUE",
+          "quantity": "0.017",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0050",
+          "material": "11021733",
+          "description": "INK EVA SCREEN PRINTING COLOUR RED",
+          "quantity": "0.015",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0070",
+          "material": "11021737",
+          "description": "INK EVA SCREEN PRINTING ORIGINAL YELLOW",
+          "quantity": "0.002",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0080",
+          "material": "11021734",
+          "description": "INK EVA SCREEN PRINTING MIDYELLOW",
+          "quantity": "0.002",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0090",
+          "material": "11021732",
+          "description": "INK EVA SCREEN PRINTING COLOUR GREEN",
+          "quantity": "0.003",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0100",
+          "material": "11022139",
+          "description": "INK EVA SCREEN PRINTING PEVA FLORESCENT",
+          "quantity": "0.001",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0110",
+          "material": "11021686",
+          "description": "SILICONE EMULSION, (20-22% OIL CONTENT)",
+          "quantity": "0.125",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0120",
+          "material": "11022154",
+          "description": "CLEANER 6040",
+          "quantity": "0.100",
+          "unit": "L",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0130",
+          "material": "12000079",
+          "description": "EVA PRIMER",
+          "quantity": "0.220",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0140",
+          "material": "PPBH0001C",
+          "description": "PKG PAIR GRP FOR BAHAMAS CHILD -1",
+          "quantity": "100",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": true
+        },
+        {
+          "item": "0150",
+          "material": "11021698",
+          "description": "REDUCER FARBATONE TP-65",
+          "quantity": "0.090",
+          "unit": "L",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0160",
+          "material": "C1HL0003C",
+          "description": "Fin. Strap Hi Lite 03 C",
+          "quantity": "100",
+          "unit": "PAA",
+          "itemCategory": "L",
+          "assembly": true
+        },
+        {
+          "item": "0170",
+          "material": "11031877",
+          "description": "INK SCREEN PRINTING WHITE - EVA-S- 666",
+          "quantity": "0.018",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0180",
+          "material": "11031874",
+          "description": "INK SCREEN PRINT. EVA-PLUS BLACK-501",
+          "quantity": "0.017",
           "unit": "KG",
           "itemCategory": "L",
           "assembly": false
         }
       ],
-      "warnings": [],
-      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+      "warnings": [
+        {
+          "item": "0020",
+          "material": "C1BH0214C",
+          "reason": "Component C1BH0214C (Item 0020): Asm is unchecked in target plant (1012) because its sub-BOM does not exist in target plant."
+        }
+      ],
+      "status": "COPIED_WITH_WARNINGS_VIA_GUI"
     },
-    "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM AUDIT_MAIN",
-    "actionId": "act_1790593267290_213a972d_bom_0_AUDIT_SUB",
-    "timestamp": "2026-09-28T11:01:07.292Z"
+    "sourcePrompt": "Copy BOM from Material A1BH0214C Plant 1001 Usage 1 → to Material A1BH0214C Plant 1012 Usage 1",
+    "actionId": "act_1790599518625_9fe3d650_bom_0_A1BH0214C_alt1",
+    "timestamp": "2026-09-28T12:45:18.627Z"
   },
   {
-    "logId": "audit_1790593267293_02c7a27d",
+    "logId": "audit_1790599518628_310ccf69",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
     "entityKey": "bom",
     "actionType": "copy_bom",
-    "recordId": "AUDIT_MAIN",
-    "businessPartnerId": "AUDIT_MAIN",
-    "task": "Main BOM Copy (AUDIT_MAIN)",
+    "recordId": "C1BH0214C",
+    "businessPartnerId": "C1BH0214C",
+    "task": "Sub-BOM Copy (C1BH0214C)",
     "reason": null,
     "steps": [
-      "Initiated copy_bom action for bom AUDIT_MAIN",
+      "Initiated copy_bom action for bom C1BH0214C",
       "Human confirmation verified",
       "Executed copy_bom successfully"
     ],
@@ -61,7 +203,7 @@
     "ticketId": null,
     "beforeValues": null,
     "afterValues": {
-      "material": "AUDIT_MAIN",
+      "material": "C1BH0214C",
       "plant": "1012",
       "bomUsage": "1",
       "alternativeBom": "1",
@@ -69,9 +211,10 @@
       "components": [
         {
           "item": "0010",
-          "material": "AUDIT_SUB",
+          "material": "C2BH0214C",
+          "description": "CURED STRAP BAHAMAS 214",
           "quantity": "1",
-          "unit": "EA",
+          "unit": "PAA",
           "itemCategory": "L",
           "assembly": true
         }
@@ -79,8 +222,51 @@
       "warnings": [],
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
-    "sourcePrompt": "Copy BOM from AUDIT_MAIN plant 1001 to plant 1012",
-    "actionId": "act_1790593267290_213a972d_bom_1_AUDIT_MAIN",
-    "timestamp": "2026-09-28T11:01:07.293Z"
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
+    "actionId": "act_1790599518625_9fe3d650_bom_1_C1BH0214C_alt1",
+    "timestamp": "2026-09-28T12:45:18.628Z"
+  },
+  {
+    "logId": "audit_1790599518635_07ff0980",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "EXISTING_MAT",
+    "businessPartnerId": "EXISTING_MAT",
+    "task": "Main BOM Copy (EXISTING_MAT)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom EXISTING_MAT",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "EXISTING_MAT",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "2",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "SOURCE_COPIED_COMP",
+          "description": "Copied from Source",
+          "quantity": "200",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Copy BOM from Material EXISTING_MAT Plant 1001 Usage 1 → to Material EXISTING_MAT Plant 1012 Usage 1",
+    "actionId": "act_1790599518633_26ac0bd3_bom_0_EXISTING_MAT_alt2",
+    "timestamp": "2026-09-28T12:45:18.635Z"
   }
 ]

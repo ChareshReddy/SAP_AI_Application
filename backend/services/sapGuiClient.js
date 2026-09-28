@@ -1741,14 +1741,21 @@ If itemSbarType = "E" Or itemSbarType = "A" Then
     WScript.Quit 0
 End If
 
-If itemSbarType = "W" Then
-    session.findById("wnd[0]").sendVKey 0
-    WScript.Sleep 300
-End If
+' Clear any warning/info before pressing Save
+Dim sbarAck, curSbarType
+For sbarAck = 1 To 5
+    curSbarType = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType
+    If curSbarType = "W" Or curSbarType = "I" Then
+        session.findById("wnd[0]").sendVKey 0
+        WScript.Sleep 300
+    Else
+        Exit For
+    End If
+Next
 
 ' 4. Save BOM (Ctrl+S / btn[11])
 session.findById("${CS01_FIELD_IDS.SAVE_BUTTON}").press
-WScript.Sleep 500
+WScript.Sleep 600
 
 ' Check if a confirmation or warning popup appeared upon Save
 popupLoopCount = 0
@@ -1768,6 +1775,17 @@ Do While session.Children.Count > 1 And popupLoopCount < 5
         WScript.Sleep 300
     End If
 Loop
+
+' Dismiss any warning/info on main screen after save (confirm with Enter)
+For sbarAck = 1 To 5
+    curSbarType = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType
+    If curSbarType = "W" Or curSbarType = "I" Then
+        session.findById("wnd[0]").sendVKey 0
+        WScript.Sleep 500
+    Else
+        Exit For
+    End If
+Next
 
 ' 5. Read Status Bar after save
 Dim sbarText, sbarType, safeSaveSbar
@@ -1834,6 +1852,29 @@ Loop
 ' Clear any status bar warning on CS03 initial screen
 If session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "W" Or session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "I" Then
     session.findById("wnd[0]").sendVKey 0
+    WScript.Sleep 500
+End If
+
+' If CS03 shows Alternative Overview (Screen 187/0187) because multiple alternatives exist:
+If session.Info.ScreenNumber = "0187" Or session.Info.ScreenNumber = "187" Then
+    On Error Resume Next
+    Dim cs03AltTbl, arIdx, targetRowIdx, curAltVal
+    Set cs03AltTbl = session.findById("wnd[0]/usr/tblSAPLCSDITCALT")
+    targetRowIdx = 0
+    If Not cs03AltTbl Is Nothing Then
+        For arIdx = 0 To cs03AltTbl.VisibleRowCount - 1
+            curAltVal = Trim(session.findById("wnd[0]/usr/tblSAPLCSDITCALT/txtRC29K-STLAL[0," & arIdx & "]").text)
+            If curAltVal <> "" Then
+                targetRowIdx = arIdx
+                If createdAltBom <> "" And curAltVal = createdAltBom Then
+                    Exit For
+                End If
+            End If
+        Next
+        session.findById("wnd[0]/usr/tblSAPLCSDITCALT/txtRC29K-STLAL[0," & targetRowIdx & "]").setFocus
+        session.findById("wnd[0]").sendVKey 2
+    End If
+    On Error Goto 0
     WScript.Sleep 500
 End If
 
@@ -2125,7 +2166,8 @@ export async function copyBomViaGui(params) {
       targetComponents: targetCs03.components || [],
       targetPlant: cleanTargetPlant,
       missingSubBomMaterials: params.missingSubBomMaterials || [],
-      copiedMainOnly: params.copiedMainOnly !== undefined ? Boolean(params.copiedMainOnly) : true
+      copiedMainOnly: params.copiedMainOnly !== undefined ? Boolean(params.copiedMainOnly) : true,
+      allowMissingSubBoms: Boolean(params.allowMissingSubBoms)
     });
 
     if (!comparison.match) {
@@ -2145,6 +2187,99 @@ export async function copyBomViaGui(params) {
       plant: cleanTargetPlant,
       bomUsage: cleanTargetUsage,
       alternativeBom: resolvedTargetAlt,
+      validFrom: target.validFrom || '',
+      components: targetCs03.components || [],
+      warnings: comparison.warnings,
+      status: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'COPIED_WITH_WARNINGS_VIA_GUI' : 'COPIED_AND_VERIFIED_VIA_GUI'
+    };
+
+    return {
+      success: true,
+      verified: true,
+      status: comparison.status,
+      warnings: comparison.warnings,
+      code: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'BOM_COPIED_WITH_WARNINGS' : 'BOM_COPIED_AND_VERIFIED',
+      message: comparison.status === 'SUCCESS_WITH_WARNINGS'
+        ? `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${resolvedTargetAlt}) copied from ${cleanSourceMat}/${cleanSourcePlant}. [SUCCESS_WITH_WARNINGS: ${comparison.warnings.map(w => w.reason).join('; ')}]`
+        : `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${resolvedTargetAlt}) copied from ${cleanSourceMat}/${cleanSourcePlant} and verified in CS03.`,
+      before: null,
+      after: createdRecord,
+      alternativeBom: resolvedTargetAlt
+    };
+  }
+
+  // In SAP GUI CS01, when adding an alternative to an existing BOM across plants,
+  // the Copy From popup (wnd[1]) locks the Plant and Material fields to the target plant/material.
+  // Standard CS01 Copy-From popup does not support cross-plant copy for existing BOMs.
+  // When target BOM already exists and source plant differs from target plant,
+  // we copy the BOM by creating the new alternative directly in CS01 using the verified source components.
+  let targetCheck = null;
+  if (cleanSourcePlant !== cleanTargetPlant) {
+    targetCheck = await verifyBomInCs03({
+      material: cleanTargetMat,
+      plant: cleanTargetPlant,
+      bomUsage: cleanTargetUsage
+    });
+  }
+
+  const targetAlreadyExists = Boolean(targetCheck?.success && targetCheck?.exists);
+  const resolvedTargetAlt = targetAlreadyExists
+    ? resolveNextAvailableAlternative(targetCheck.availableAlternatives || ['1'], cleanTargetAlt)
+    : resolveNextAvailableAlternative([], cleanTargetAlt);
+
+  if (targetAlreadyExists && cleanSourcePlant !== cleanTargetPlant) {
+    const createResult = await createBomViaGui({
+      material: cleanTargetMat,
+      plant: cleanTargetPlant,
+      bomUsage: cleanTargetUsage,
+      alternativeBom: resolvedTargetAlt,
+      validFrom: target.validFrom || '',
+      components: sourceCheck.components || []
+    });
+
+    if (!createResult.success || createResult.verified === false) {
+      return createResult;
+    }
+
+    const targetCs03 = await verifyBomInCs03({
+      material: cleanTargetMat,
+      plant: cleanTargetPlant,
+      bomUsage: cleanTargetUsage,
+      alternativeBom: resolvedTargetAlt
+    });
+
+    const comparison = compareBomStructures({
+      sourceComponents: sourceCheck.components || [],
+      targetComponents: targetCs03.components || [],
+      targetPlant: cleanTargetPlant,
+      missingSubBomMaterials: params.missingSubBomMaterials || [],
+      copiedMainOnly: params.copiedMainOnly !== undefined ? Boolean(params.copiedMainOnly) : true,
+      allowMissingSubBoms: Boolean(params.allowMissingSubBoms)
+    });
+
+    if (!comparison.match) {
+      return {
+        success: false,
+        verified: false,
+        code: 'STRUCTURAL_VERIFICATION_FAILED',
+        message: comparison.summary,
+        differences: comparison.differences,
+        before: null,
+        after: null
+      };
+    }
+
+    const createdRecord = {
+      material: target.material,
+      plant: target.plant,
+      bomUsage: target.bomUsage || '1',
+      alternativeBom: resolvedTargetAlt,
+      sourceReference: {
+        material: source.material,
+        plant: source.plant,
+        bomUsage: source.bomUsage || '1',
+        alternativeBom: source.alternativeBom || ''
+      },
       validFrom: target.validFrom || '',
       components: targetCs03.components || [],
       warnings: comparison.warnings,
@@ -2459,7 +2594,7 @@ On Error Goto 0
 ' Check if Plant field is locked to target plant and differs from source plant
 If Not fldRefPlt Is Nothing Then
     If (Not fldRefPlt.changeable) And UCase(Trim(fldRefPlt.text)) <> UCase("${sourcePlant}") Then
-        WScript.Echo "{""success"":false,""verified"":false,""code"":""TARGET_BOM_EXISTS_CANNOT_COPY"",""message"":""Cannot copy BOM: Material ${targetMaterial} already has an existing BOM in target plant ${targetPlant}. In SAP GUI, cross-plant copy is not permitted when adding an alternative to an existing BOM. Please delete the existing BOM in plant ${targetPlant} or select a different target.""}"
+        WScript.Echo "{""success"":false,""verified"":false,""code"":""CROSS_PLANT_ALT_LOCKED"",""message"":""In SAP GUI CS01, cross-plant copy is not permitted in Copy From popup when adding an alternative to an existing BOM. Fallback to direct creation.""}"
         On Error Resume Next
         wnd1.findById("tbar[0]/btn[12]").press
         session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
@@ -2898,6 +3033,80 @@ WScript.Echo "{""success"":true,""verified"":true,""message"":""" & safeSaveMsg 
     }
 
     if (!parsedResult.success || parsedResult.verified === false) {
+      if (parsedResult.code === 'CROSS_PLANT_ALT_LOCKED') {
+        const createResult = await createBomViaGui({
+          material: cleanTargetMat,
+          plant: cleanTargetPlant,
+          bomUsage: cleanTargetUsage,
+          alternativeBom: cleanTargetAlt || '2',
+          validFrom: target.validFrom || '',
+          components: sourceCheck.components || []
+        });
+
+        if (!createResult.success || createResult.verified === false) {
+          return createResult;
+        }
+
+        const targetCs03 = await verifyBomInCs03({
+          material: cleanTargetMat,
+          plant: cleanTargetPlant,
+          bomUsage: cleanTargetUsage,
+          alternativeBom: createResult.alternativeBom || cleanTargetAlt || '2'
+        });
+
+        const comparison = compareBomStructures({
+          sourceComponents: sourceCheck.components || [],
+          targetComponents: targetCs03.components || [],
+          targetPlant: cleanTargetPlant,
+          missingSubBomMaterials: params.missingSubBomMaterials || [],
+          copiedMainOnly: params.copiedMainOnly !== undefined ? Boolean(params.copiedMainOnly) : true,
+          allowMissingSubBoms: Boolean(params.allowMissingSubBoms)
+        });
+
+        if (!comparison.match) {
+          return {
+            success: false,
+            verified: false,
+            code: 'STRUCTURAL_VERIFICATION_FAILED',
+            message: comparison.summary,
+            differences: comparison.differences,
+            before: null,
+            after: null
+          };
+        }
+
+        const createdRecord = {
+          material: target.material,
+          plant: target.plant,
+          bomUsage: target.bomUsage || '1',
+          alternativeBom: createResult.alternativeBom || cleanTargetAlt || '2',
+          sourceReference: {
+            material: source.material,
+            plant: source.plant,
+            bomUsage: source.bomUsage || '1',
+            alternativeBom: source.alternativeBom || ''
+          },
+          validFrom: target.validFrom || '',
+          components: targetCs03.components || [],
+          warnings: comparison.warnings,
+          status: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'COPIED_WITH_WARNINGS_VIA_GUI' : 'COPIED_AND_VERIFIED_VIA_GUI'
+        };
+
+        return {
+          success: true,
+          verified: true,
+          status: comparison.status,
+          warnings: comparison.warnings,
+          code: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'BOM_COPIED_WITH_WARNINGS' : 'BOM_COPIED_AND_VERIFIED',
+          message: comparison.status === 'SUCCESS_WITH_WARNINGS'
+            ? `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${createdRecord.alternativeBom}) copied from ${cleanSourceMat}/${cleanSourcePlant}. [SUCCESS_WITH_WARNINGS: ${comparison.warnings.map(w => w.reason).join('; ')}]`
+            : `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${createdRecord.alternativeBom}) copied from ${cleanSourceMat}/${cleanSourcePlant} and verified in CS03.`,
+          before: null,
+          after: createdRecord,
+          alternativeBom: createdRecord.alternativeBom
+        };
+      }
+
       return {
         success: false,
         verified: false,
@@ -2920,7 +3129,8 @@ WScript.Echo "{""success"":true,""verified"":true,""message"":""" & safeSaveMsg 
       targetComponents: targetCs03.components || parsedResult.copiedComponents || [],
       targetPlant: cleanTargetPlant,
       missingSubBomMaterials: params.missingSubBomMaterials || [],
-      copiedMainOnly: params.copiedMainOnly !== undefined ? Boolean(params.copiedMainOnly) : true
+      copiedMainOnly: params.copiedMainOnly !== undefined ? Boolean(params.copiedMainOnly) : true,
+      allowMissingSubBoms: Boolean(params.allowMissingSubBoms)
     });
 
     if (!comparison.match) {
@@ -3895,6 +4105,531 @@ export async function verifyHierarchyStructure({
 }
 
 /**
+ * Recursively inspects and compares the Source and Target BOM hierarchies up to maxDepth (5).
+ * Detects missing sub-BOMs, structural differences (components, quantities, units, item categories),
+ * and assembly indicator (Asm) states. Protects against circular references.
+ *
+ * @param {object} params
+ * @param {object} params.source - { material, plant, bomUsage, alternativeBom }
+ * @param {object} params.target - { material, plant, bomUsage, alternativeBom }
+ * @param {number} [params.maxDepth=5]
+ * @param {boolean} [params.isReverify=false]
+ * @returns {Promise<{
+ *   match: boolean,
+ *   status: string,
+ *   missingSubBoms: Array<{ material: string, sourceMaterial: string, sourcePlant: string, targetPlant: string, bomUsage: string, depth: number, parentMaterial: string }>,
+ *   discrepancies: Array<string>,
+ *   verifiedBoms: Array<object>,
+ *   maxDepthReached: number,
+ *   levelsVerified: number,
+ *   cycleDetected: boolean,
+ *   summary: string
+ * }>}
+ */
+export async function inspectAndVerifyHierarchy({
+  source,
+  target,
+  maxDepth = 5,
+  isReverify = false
+}) {
+  const cleanSrcMat = String(source?.material || '').trim().toUpperCase();
+  const cleanSrcPlant = String(source?.plant || '').trim();
+  const cleanSrcUsage = String(source?.bomUsage || '1').trim();
+  const cleanSrcAlt = String(source?.alternativeBom || '').trim();
+
+  const cleanTgtMat = String(target?.material || '').trim().toUpperCase();
+  const cleanTgtPlant = String(target?.plant || '').trim();
+  const cleanTgtUsage = String(target?.bomUsage || '1').trim();
+  const cleanTgtAlt = String(target?.alternativeBom || '').trim();
+
+  const missingSubBoms = [];
+  const discrepancies = [];
+  const verifiedBoms = [];
+  const visited = new Set();
+  let maxDepthReached = 0;
+  let cycleDetected = false;
+
+  function addMissingSubBom(entry) {
+    const existing = missingSubBoms.find((m) => m.material.toUpperCase() === entry.material.toUpperCase() && m.targetPlant === entry.targetPlant);
+    if (!existing) {
+      missingSubBoms.push(entry);
+    } else if (existing.depth < entry.depth) {
+      existing.depth = entry.depth;
+    }
+  }
+
+  async function traverse(currentSrcMat, currentSrcPlant, currentSrcUsage, currentSrcAlt, currentTgtMat, currentTgtPlant, currentTgtUsage, currentTgtAlt, depth, parentMaterial = '') {
+    maxDepthReached = Math.max(maxDepthReached, depth);
+
+    const visitKey = `${currentSrcMat}:${currentSrcPlant}:${currentSrcUsage}`;
+    if (visited.has(visitKey)) {
+      cycleDetected = true;
+      return;
+    }
+    visited.add(visitKey);
+
+    // 1. Fetch Source BOM in CS03
+    const srcRes = await verifyBomInCs03({
+      material: currentSrcMat,
+      plant: currentSrcPlant,
+      bomUsage: currentSrcUsage,
+      alternativeBom: currentSrcAlt
+    });
+
+    if (!srcRes.exists) {
+      discrepancies.push(`Source BOM ${currentSrcMat} in plant ${currentSrcPlant} (Usage ${currentSrcUsage}) does not exist.`);
+      return;
+    }
+
+    const srcComps = srcRes.components || [];
+
+    // 2. Fetch Target BOM in CS03
+    const tgtRes = await verifyBomInCs03({
+      material: currentTgtMat,
+      plant: currentTgtPlant,
+      bomUsage: currentTgtUsage,
+      alternativeBom: currentTgtAlt
+    });
+
+    if (!tgtRes.exists) {
+      if (depth === 0) {
+        discrepancies.push(`Target main BOM ${currentTgtMat} in plant ${currentTgtPlant} (Alt ${currentTgtAlt || '1'}) does not exist in CS03.`);
+      } else {
+        addMissingSubBom({
+          material: currentTgtMat,
+          sourceMaterial: currentSrcMat,
+          sourcePlant: currentSrcPlant,
+          targetPlant: currentTgtPlant,
+          bomUsage: currentTgtUsage,
+          depth,
+          parentMaterial
+        });
+      }
+
+      // If target doesn't exist, still traverse source's child assemblies to discover any deeper missing sub-BOMs
+      if (depth + 1 < maxDepth) {
+        for (const sc of srcComps) {
+          if (toBool(sc.assembly)) {
+            const scMat = String(sc.material || '').trim().toUpperCase();
+            await traverse(
+              scMat,
+              currentSrcPlant,
+              currentSrcUsage,
+              '',
+              scMat,
+              currentTgtPlant,
+              currentTgtUsage,
+              '',
+              depth + 1,
+              currentSrcMat
+            );
+          }
+        }
+      }
+      return;
+    }
+
+    const tgtComps = tgtRes.components || [];
+
+    // 3. Compare structure
+    const tgtByPos = new Map();
+    const tgtByMat = new Map();
+    for (const tc of tgtComps) {
+      if (tc.item) tgtByPos.set(String(tc.item).trim(), tc);
+      if (tc.material) tgtByMat.set(String(tc.material).trim().toUpperCase(), tc);
+    }
+
+    // Component count check
+    if (srcComps.length !== tgtComps.length) {
+      discrepancies.push(`Component count mismatch for BOM ${currentTgtMat}: source has ${srcComps.length}, target has ${tgtComps.length}`);
+    }
+
+    for (const sc of srcComps) {
+      const scMat = String(sc.material || '').trim().toUpperCase();
+      const scItem = String(sc.item || '').trim();
+      const tc = tgtByPos.get(scItem) || tgtByMat.get(scMat);
+
+      if (!tc) {
+        discrepancies.push(`Component Item ${scItem} (${scMat}) is missing in target BOM ${currentTgtMat}`);
+        continue;
+      }
+
+      const tcMat = String(tc.material || '').trim().toUpperCase();
+      if (scMat !== tcMat) {
+        discrepancies.push(`Material mismatch at Item ${scItem} in BOM ${currentTgtMat}: source has ${scMat}, target has ${tcMat}`);
+      }
+
+      const sQty = parseFloat(sc.quantity);
+      const tQty = parseFloat(tc.quantity);
+      if (!isNaN(sQty) && !isNaN(tQty) && Math.abs(sQty - tQty) > 0.0001) {
+        discrepancies.push(`Quantity mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.quantity}, target has ${tc.quantity}`);
+      }
+
+      const sUnit = String(sc.unit || '').trim().toUpperCase();
+      const tUnit = String(tc.unit || '').trim().toUpperCase();
+      if (sUnit && tUnit && sUnit !== tUnit) {
+        discrepancies.push(`Unit mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.unit}, target has ${tc.unit}`);
+      }
+
+      const sCat = String(sc.itemCategory || '').trim().toUpperCase();
+      const tCat = String(tc.itemCategory || '').trim().toUpperCase();
+      if (sCat && tCat && sCat !== tCat) {
+        discrepancies.push(`Item category mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.itemCategory}, target has ${tc.itemCategory}`);
+      }
+
+      const sAsm = toBool(sc.assembly);
+      const tAsm = toBool(tc.assembly);
+
+      let childExistsInTarget = false;
+      let targetChildCheck = null;
+      if (sAsm) {
+        targetChildCheck = await verifyBomInCs03({
+          material: scMat,
+          plant: currentTgtPlant,
+          bomUsage: currentTgtUsage
+        });
+        childExistsInTarget = Boolean(targetChildCheck.success && targetChildCheck.exists);
+
+        if (!childExistsInTarget) {
+          addMissingSubBom({
+            material: scMat,
+            sourceMaterial: scMat,
+            sourcePlant: currentSrcPlant,
+            targetPlant: currentTgtPlant,
+            bomUsage: currentTgtUsage,
+            depth: depth + 1,
+            parentMaterial: currentTgtMat
+          });
+
+          if (isReverify) {
+            discrepancies.push(`Sub-BOM for ${scMat} is still missing in target plant ${currentTgtPlant} after repair.`);
+          }
+        } else {
+          if (!tAsm) {
+            discrepancies.push(`Assembly indicator mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: child BOM exists in plant ${currentTgtPlant} but Asm is unchecked`);
+          }
+        }
+      } else {
+        if (tAsm) {
+          discrepancies.push(`Assembly indicator mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: source Asm=false, target Asm=true`);
+        }
+      }
+
+      // Recurse into child BOM if sAsm is true
+      if (sAsm && depth + 1 < maxDepth) {
+        const nextTgtAlt = (targetChildCheck?.availableAlternatives && targetChildCheck.availableAlternatives[0]) || '';
+        await traverse(
+          scMat,
+          currentSrcPlant,
+          currentSrcUsage,
+          '',
+          scMat,
+          currentTgtPlant,
+          currentTgtUsage,
+          nextTgtAlt,
+          depth + 1,
+          currentTgtMat
+        );
+      }
+    }
+
+    verifiedBoms.push({
+      material: currentTgtMat,
+      plant: currentTgtPlant,
+      alternativeBom: currentTgtAlt || '1',
+      componentCount: tgtComps.length,
+      status: 'VERIFIED'
+    });
+  }
+
+  await traverse(
+    cleanSrcMat,
+    cleanSrcPlant,
+    cleanSrcUsage,
+    cleanSrcAlt,
+    cleanTgtMat,
+    cleanTgtPlant,
+    cleanTgtUsage,
+    cleanTgtAlt,
+    0
+  );
+
+  const match = discrepancies.length === 0 && (isReverify ? missingSubBoms.length === 0 : true);
+
+  return {
+    match,
+    status: match ? 'SUCCESS' : 'FAILURE',
+    missingSubBoms,
+    discrepancies,
+    verifiedBoms,
+    maxDepthReached,
+    levelsVerified: maxDepthReached + 1,
+    cycleDetected,
+    summary: match
+      ? (missingSubBoms.length > 0
+          ? `Structure matches so far, but ${missingSubBoms.length} sub-BOM(s) missing in target plant ${cleanTgtPlant}.`
+          : `All ${verifiedBoms.length} BOM(s) verified with 100% component and assembly parity.`)
+      : `Hierarchy verification failed with ${discrepancies.length} discrepancy(s): ${discrepancies.join(' | ')}`
+  };
+}
+
+/**
+ * Repairs missing sub-BOMs by copying them from source plant to target plant
+ * in strict bottom-up order (deepest sub-BOMs first). If a sub-BOM already exists
+ * in the target plant, it is created under the next available alternative.
+ *
+ * @param {object} params
+ * @param {Array<object>} params.missingSubBoms
+ * @param {Function} [params.onProgress]
+ * @param {Function} [params.auditHook]
+ * @returns {Promise<Array<object>>}
+ */
+export async function repairHierarchyBottomUp({
+  missingSubBoms = [],
+  onProgress,
+  auditHook
+}) {
+  if (!missingSubBoms || missingSubBoms.length === 0) {
+    return [];
+  }
+
+  // Deduplicate by material + targetPlant + bomUsage, keeping highest depth
+  const dedupMap = new Map();
+  for (const item of missingSubBoms) {
+    const key = `${item.material.toUpperCase()}:${item.targetPlant}:${item.bomUsage || '1'}`;
+    if (!dedupMap.has(key) || dedupMap.get(key).depth < item.depth) {
+      dedupMap.set(key, item);
+    }
+  }
+
+  // Strict bottom-up sort: deepest sub-BOMs first (e.g. depth 3 -> 2 -> 1)
+  const sorted = Array.from(dedupMap.values()).sort((a, b) => b.depth - a.depth);
+  const createdSubBoms = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const sub = sorted[i];
+    onProgress?.(`Repairing missing sub-BOM (${i + 1} of ${sorted.length}): ${sub.material}...`);
+
+    // Target alternative selection:
+    // Check existing alternatives in target plant for this sub-BOM
+    const targetCheck = await verifyBomInCs03({
+      material: sub.material,
+      plant: sub.targetPlant,
+      bomUsage: sub.bomUsage || '1'
+    });
+
+    const existingAlts = (targetCheck.success && targetCheck.exists)
+      ? (targetCheck.availableAlternatives || ['1'])
+      : [];
+
+    const resolvedAlt = resolveNextAvailableAlternative(existingAlts, '');
+
+    // Copy sub-BOM into target plant under resolvedAlt
+    const copyRes = await copyBomViaGui({
+      source: {
+        material: sub.sourceMaterial || sub.material,
+        plant: sub.sourcePlant,
+        bomUsage: sub.bomUsage || '1'
+      },
+      target: {
+        material: sub.material,
+        plant: sub.targetPlant,
+        bomUsage: sub.bomUsage || '1',
+        alternativeBom: resolvedAlt
+      },
+      copiedMainOnly: true,
+      allowMissingSubBoms: true
+    });
+
+    if (!copyRes.success || copyRes.verified === false) {
+      const err = new Error(`BOM copy failed for material ${sub.material} in plant ${sub.targetPlant} (Alternative ${resolvedAlt}): ${copyRes.message || 'Operation failed'}. Execution stopped.`);
+      err.code = copyRes.code || 'COPY_BOM_FAILED';
+      err.failedBom = { material: sub.material, plant: sub.targetPlant, alternative: resolvedAlt };
+      throw err;
+    }
+
+    const createdRecord = {
+      material: sub.material,
+      plant: sub.targetPlant,
+      bomUsage: sub.bomUsage || '1',
+      alternativeBom: resolvedAlt,
+      depth: sub.depth,
+      isMain: false,
+      after: copyRes.after
+    };
+
+    auditHook?.(createdRecord, resolvedAlt, copyRes);
+    createdSubBoms.push(createdRecord);
+  }
+
+  return createdSubBoms;
+}
+
+/**
+ * Executes the complete COPY → VERIFY → REPAIR → VERIFY workflow.
+ *
+ * STEP 1: Copies initial main BOM into target plant under next available alternative.
+ * STEP 2: Verifies hierarchy and identifies any missing sub-BOMs.
+ * STEP 3: Repairs missing sub-BOMs in bottom-up order (deepest first), creating new alternatives if needed.
+ * STEP 4: Re-verifies complete hierarchy from top down until 100% parity is confirmed.
+ *
+ * @param {object} params
+ * @param {object} params.source - { material, plant, bomUsage, alternativeBom }
+ * @param {object} params.target - { material, plant, bomUsage, alternativeBom, validFrom }
+ * @param {string} [params.validFrom='']
+ * @param {number} [params.maxDepth=5]
+ * @param {Function} [params.onProgress]
+ * @param {Function} [params.auditHook]
+ * @returns {Promise<object>}
+ */
+export async function copyBomHierarchyWithRepair({
+  source,
+  target,
+  validFrom = '',
+  maxDepth = 5,
+  onProgress,
+  auditHook
+}) {
+  const cleanSrcMat = String(source?.material || '').trim().toUpperCase();
+  const cleanSrcPlant = String(source?.plant || '').trim();
+  const cleanSrcUsage = String(source?.bomUsage || '1').trim();
+  const cleanSrcAlt = String(source?.alternativeBom || '').trim();
+
+  const cleanTgtMat = String(target?.material || '').trim().toUpperCase();
+  const cleanTgtPlant = String(target?.plant || '').trim();
+  const cleanTgtUsage = String(target?.bomUsage || '1').trim();
+  const cleanTgtAlt = String(target?.alternativeBom || '').trim();
+
+  // STEP 1: COPY initial BOM
+  onProgress?.('Copying BOM...');
+
+  // Target alternative selection rule for main BOM
+  const targetCheck = await verifyBomInCs03({
+    material: cleanTgtMat,
+    plant: cleanTgtPlant,
+    bomUsage: cleanTgtUsage
+  });
+
+  const existingTargetAlts = (targetCheck.success && targetCheck.exists)
+    ? (targetCheck.availableAlternatives || ['1'])
+    : [];
+
+  const resolvedTargetAlt = resolveNextAvailableAlternative(existingTargetAlts, cleanTgtAlt);
+
+  const mainCopyRes = await copyBomViaGui({
+    source: {
+      material: cleanSrcMat,
+      plant: cleanSrcPlant,
+      bomUsage: cleanSrcUsage,
+      alternativeBom: cleanSrcAlt
+    },
+    target: {
+      material: cleanTgtMat,
+      plant: cleanTgtPlant,
+      bomUsage: cleanTgtUsage,
+      alternativeBom: resolvedTargetAlt,
+      validFrom: validFrom || target.validFrom || ''
+    },
+    copiedMainOnly: true,
+    allowMissingSubBoms: true
+  });
+
+  if (!mainCopyRes.success || mainCopyRes.verified === false) {
+    const err = new Error(`Main BOM copy failed for material ${cleanTgtMat} in plant ${cleanTgtPlant} (Alternative ${resolvedTargetAlt}): ${mainCopyRes.message || 'Operation failed'}.`);
+    err.code = mainCopyRes.code || 'COPY_BOM_FAILED';
+    err.failedBom = { material: cleanTgtMat, plant: cleanTgtPlant, alternative: resolvedTargetAlt };
+    throw err;
+  }
+
+  const mainRecord = {
+    material: cleanTgtMat,
+    plant: cleanTgtPlant,
+    bomUsage: cleanTgtUsage,
+    alternativeBom: resolvedTargetAlt,
+    depth: 0,
+    isMain: true,
+    after: mainCopyRes.after
+  };
+
+  auditHook?.(mainRecord, resolvedTargetAlt, mainCopyRes);
+  const createdBoms = [mainRecord];
+
+  // STEP 2: VERIFY hierarchy
+  onProgress?.('Verifying BOM structure...');
+  const initialVerify = await inspectAndVerifyHierarchy({
+    source: {
+      material: cleanSrcMat,
+      plant: cleanSrcPlant,
+      bomUsage: cleanSrcUsage,
+      alternativeBom: cleanSrcAlt
+    },
+    target: {
+      material: cleanTgtMat,
+      plant: cleanTgtPlant,
+      bomUsage: cleanTgtUsage,
+      alternativeBom: resolvedTargetAlt
+    },
+    maxDepth,
+    isReverify: false
+  });
+
+  // STEP 3: REPAIR missing sub-BOMs
+  if (initialVerify.missingSubBoms && initialVerify.missingSubBoms.length > 0) {
+    const repaired = await repairHierarchyBottomUp({
+      missingSubBoms: initialVerify.missingSubBoms,
+      onProgress,
+      auditHook
+    });
+    createdBoms.push(...repaired);
+  }
+
+  // STEP 4: RE-VERIFY complete hierarchy
+  onProgress?.('Verifying complete structure...');
+  const finalVerify = await inspectAndVerifyHierarchy({
+    source: {
+      material: cleanSrcMat,
+      plant: cleanSrcPlant,
+      bomUsage: cleanSrcUsage,
+      alternativeBom: cleanSrcAlt
+    },
+    target: {
+      material: cleanTgtMat,
+      plant: cleanTgtPlant,
+      bomUsage: cleanTgtUsage,
+      alternativeBom: resolvedTargetAlt
+    },
+    maxDepth,
+    isReverify: true
+  });
+
+  if (!finalVerify.match) {
+    const err = new Error(`Structural verification failed for BOM hierarchy: ${finalVerify.summary}`);
+    err.code = 'STRUCTURAL_VERIFICATION_FAILED';
+    err.differences = finalVerify.discrepancies;
+    err.verification = finalVerify;
+    throw err;
+  }
+
+  const totalBomsCreated = createdBoms.length;
+  onProgress?.(`BOM copy complete: ${totalBomsCreated} BOM${totalBomsCreated > 1 ? 's' : ''} created, structure fully verified`);
+
+  return {
+    success: true,
+    verified: true,
+    status: 'SUCCESS',
+    code: 'BOM_HIERARCHY_COPIED_AND_VERIFIED',
+    message: `Successfully copied complete BOM hierarchy for ${cleanTgtMat} (${totalBomsCreated} BOM${totalBomsCreated > 1 ? 's' : ''} created and verified in CS03).`,
+    totalBomsCreated,
+    createdBoms,
+    mainBom: mainRecord,
+    repairedBoms: createdBoms.slice(1),
+    hierarchyDepth: finalVerify.maxDepthReached,
+    levelsVerified: finalVerify.levelsVerified,
+    verification: finalVerify
+  };
+}
+
+/**
  * Pre-flight sub-BOM dependency check (retained for backward compatibility).
  * Delegates directly to discoverBomHierarchy and maps results to the expected shape.
  *
@@ -3980,7 +4715,8 @@ export function compareBomStructures({
   targetComponents = [],
   targetPlant = '',
   missingSubBomMaterials = [],
-  copiedMainOnly = false
+  copiedMainOnly = false,
+  allowMissingSubBoms = false
 }) {
   const differences = [];
   const warnings = [];
@@ -4062,14 +4798,19 @@ export function compareBomStructures({
               )
             : false));
 
-      const isExplained = Boolean(sAsm && !tAsm && copiedMainOnly && isMissingInTarget);
+      const isExplained = Boolean(
+        sAsm && !tAsm && (
+          allowMissingSubBoms ||
+          (copiedMainOnly && isMissingInTarget)
+        )
+      );
 
       if (isExplained) {
-        // EXPLAINED difference: sub-BOM does not exist in target plant and user chose main BOM only
+        // EXPLAINED difference: sub-BOM does not exist in target plant yet
         warnings.push({
           item: scItem,
           material: scMat,
-          reason: `Component ${scMat} (Item ${scItem}): Asm is unchecked in target plant ${targetPlant ? `(${targetPlant}) ` : ''}because its sub-BOM does not exist in target plant (user selected main BOM only).`
+          reason: `Component ${scMat} (Item ${scItem}): Asm is unchecked in target plant ${targetPlant ? `(${targetPlant}) ` : ''}because its sub-BOM does not exist in target plant.`
         });
       } else {
         // UNEXPLAINED difference: FAILURE!
@@ -5076,6 +5817,9 @@ export default {
   resolveNextAvailableAlternative,
   formatHierarchyTree,
   verifyHierarchyStructure,
+  inspectAndVerifyHierarchy,
+  repairHierarchyBottomUp,
+  copyBomHierarchyWithRepair,
   compareBomStructures,
   validateSourceBom,
   getMockBomDataset,
