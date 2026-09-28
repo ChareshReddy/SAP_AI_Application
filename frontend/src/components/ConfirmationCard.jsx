@@ -29,7 +29,6 @@ export default function ConfirmationCard({
   const [reason, setReason] = useState(() => action.reason || preview?.reason || '');
   const [prodConfirmation, setProdConfirmation] = useState('');
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
-  const [copySubBoms, setCopySubBoms] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(() => {
     if (!expiresAt) return 300;
     return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
@@ -318,12 +317,17 @@ export default function ConfirmationCard({
               </table>
             </div>
 
-            {/* Sub-BOM Dependency Section */}
+            {/* Complete Hierarchy Summary & Breakdown */}
             {(() => {
-              const subDeps = preview?.subBomDependencies;
-              const missingSubs = subDeps?.missingSubBoms || [];
-              const existingSubs = subDeps?.existingSubBoms || [];
-              const unextended = subDeps?.unextendedMaterials || [];
+              const copyOrder = preview?.copyOrder || preview?.hierarchy?.copyOrder || [];
+              const metrics = preview?.hierarchyMetrics || preview?.hierarchy?.metrics || {
+                totalLevels: copyOrder.length > 0 ? copyOrder.reduce((max, b) => Math.max(max, (b.depth || 0) + 1), 1) : 1,
+                totalBomsToCreate: copyOrder.length || 1,
+                totalComponents: copyOrder.reduce((sum, b) => sum + (b.componentCount || 0), 0),
+                totalAssemblies: copyOrder.reduce((sum, b) => sum + (b.components || []).filter(c => c.assembly).length, 0)
+              };
+              const unextended = preview?.hierarchy?.unextendedMaterials || preview?.subBomDependencies?.unextendedMaterials || [];
+              const formattedTree = preview?.formattedTree || '';
 
               return (
                 <div style={{ marginTop: 14 }}>
@@ -343,11 +347,11 @@ export default function ConfirmationCard({
                     }}>
                       <AlertOctagon size={18} color="#e11d48" style={{ flexShrink: 0, marginTop: 1 }} />
                       <div>
-                        <strong>Cannot copy sub-BOM: material not extended to target plant</strong>
+                        <strong>Excluded: material not extended to target plant</strong>
                         <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
                           {unextended.map((u, idx) => (
                             <li key={idx}>
-                              <strong>{u.material}</strong>: cannot copy: material not in plant {u.plant} (excluded from sub-BOM copy)
+                              <strong>{u.material}</strong>: cannot copy sub-BOM (material not in plant {u.plant})
                             </li>
                           ))}
                         </ul>
@@ -355,170 +359,96 @@ export default function ConfirmationCard({
                     </div>
                   )}
 
-                  {/* Sub-BOMs selection options if there are missing sub-BOMs */}
-                  {missingSubs.length > 0 ? (
-                    <div style={{
-                      background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: 6,
-                      padding: '12px 14px',
-                      marginBottom: 12
-                    }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Layers size={15} color="#0284c7" />
-                        <span>Sub-BOM Dependency Strategy:</span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <label style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: 10,
-                          cursor: isExecuting ? 'not-allowed' : 'pointer',
-                          padding: '8px 10px',
-                          borderRadius: 5,
-                          background: !copySubBoms ? '#e0f2fe' : '#ffffff',
-                          border: !copySubBoms ? '1px solid #38bdf8' : '1px solid #e2e8f0'
-                        }}>
-                          <input
-                            type="radio"
-                            name={`subBomChoice-${actionId}`}
-                            checked={!copySubBoms}
-                            onChange={() => setCopySubBoms(false)}
-                            disabled={isExecuting}
-                            style={{ marginTop: 3 }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: '12.5px', color: '#0f172a' }}>
-                              Copy main BOM only (Default)
-                            </div>
-                            <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: 2 }}>
-                              Creates only the main BOM (1 BOM total). Components with sub-BOMs will have their assembly indicator unchecked in target plant until their sub-BOMs are maintained.
-                            </div>
-                          </div>
-                        </label>
-
-                        <label style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: 10,
-                          cursor: isExecuting ? 'not-allowed' : 'pointer',
-                          padding: '8px 10px',
-                          borderRadius: 5,
-                          background: copySubBoms ? '#e0f2fe' : '#ffffff',
-                          border: copySubBoms ? '1px solid #38bdf8' : '1px solid #e2e8f0'
-                        }}>
-                          <input
-                            type="radio"
-                            name={`subBomChoice-${actionId}`}
-                            checked={copySubBoms}
-                            onChange={() => setCopySubBoms(true)}
-                            disabled={isExecuting}
-                            style={{ marginTop: 3 }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: '12.5px', color: '#0f172a' }}>
-                              Copy main BOM + missing sub-BOMs ({missingSubs.length} sub-BOM{missingSubs.length > 1 ? 's' : ''})
-                            </div>
-                            <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: 2 }}>
-                              Creates sub-BOMs first (deepest first), then the main BOM ({1 + missingSubs.length} BOMs total). Preserves 100% structural assembly relationships.
-                            </div>
-                          </div>
-                        </label>
-                      </div>
-
-                      {/* Missing Sub-BOMs Table */}
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: 6 }}>
-                          Missing Sub-BOMs in Target Plant ({preview?.targetPlant}):
-                        </div>
-                        <div className="sap-diff-table-wrapper">
-                          <table className="sap-diff-table">
-                            <thead>
-                              <tr>
-                                <th>Material</th>
-                                <th>Source Plant</th>
-                                <th>Target Plant</th>
-                                <th>Components</th>
-                                <th>Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {missingSubs.map((sub, idx) => (
-                                <tr key={idx}>
-                                  <td className="sap-diff-field-name"><strong>{sub.material}</strong></td>
-                                  <td>{sub.sourcePlant}</td>
-                                  <td>{sub.targetPlant}</td>
-                                  <td>{sub.componentCount} component{sub.componentCount !== 1 ? 's' : ''}</td>
-                                  <td>
-                                    {copySubBoms ? (
-                                      <span className="sap-badge sap-badge-info" style={{ fontSize: '11px' }}>
-                                        Will create first (Depth {sub.depth})
-                                      </span>
-                                    ) : (
-                                      <span className="sap-badge sap-badge-neutral" style={{ fontSize: '11px' }}>
-                                        Will skip
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
+                  {/* Hierarchy Metrics Cards */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 8,
+                    marginBottom: 12
+                  }}>
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Hierarchy Levels</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{metrics.totalLevels}</div>
                     </div>
-                  ) : null}
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>BOMs to Create</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#0284c7' }}>{metrics.totalBomsToCreate}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Total Components</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{metrics.totalComponents}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Assemblies (Sub-BOMs)</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a' }}>{metrics.totalAssemblies}</div>
+                    </div>
+                  </div>
 
-                  {/* Sub-BOMs already existing in target plant */}
-                  {existingSubs.length > 0 && (
+                  {/* Formatted Tree View (if available) */}
+                  {formattedTree && (
                     <div style={{
-                      marginTop: 10,
-                      padding: '8px 12px',
-                      background: '#f0fdf4',
-                      border: '1px solid #bbf7d0',
+                      background: '#0f172a',
+                      color: '#f8fafc',
                       borderRadius: 6,
-                      fontSize: '12px'
+                      padding: '10px 12px',
+                      fontFamily: 'monospace',
+                      fontSize: '11.5px',
+                      lineHeight: 1.5,
+                      overflowX: 'auto',
+                      marginBottom: 12,
+                      whiteSpace: 'pre'
                     }}>
-                      <div style={{ fontWeight: 600, color: '#166534', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Check size={14} color="#16a34a" />
-                        <span>Sub-BOMs already existing in target plant {preview?.targetPlant} (Skipped, never overwritten):</span>
+                      <div style={{ color: '#94a3b8', fontSize: '10.5px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        BOM Hierarchy Structure
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                        {existingSubs.map((sub, idx) => (
-                          <span key={idx} className="sap-badge sap-badge-success" style={{ fontSize: '11px' }}>
-                            {sub.material} ({sub.componentCount} components) — Skipped
-                          </span>
-                        ))}
-                      </div>
+                      {formattedTree}
                     </div>
                   )}
 
-                  {/* Total BOMs to be created summary */}
-                  <div style={{
-                    marginTop: 10,
-                    padding: '8px 12px',
-                    background: '#f1f5f9',
-                    borderRadius: 6,
-                    fontSize: '12px',
-                    color: '#334155',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <span><strong>Total BOMs to create:</strong> {copySubBoms && missingSubs.length > 0 ? 1 + missingSubs.length : 1}</span>
-                    <span style={{ color: '#64748b', fontSize: '11.5px' }}>
-                      {copySubBoms && missingSubs.length > 0
-                        ? `(1 Main BOM + ${missingSubs.length} Sub-BOM${missingSubs.length > 1 ? 's' : ''})`
-                        : '(1 Main BOM only)'}
-                    </span>
-                  </div>
+                  {/* Bottom-Up Execution Sequence Table */}
+                  {copyOrder.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Layers size={14} color="#0284c7" />
+                        <span>Execution Sequence (Strictly Bottom-Up: Sub-BOMs first, Main BOM last):</span>
+                      </div>
+                      <div className="sap-diff-table-wrapper">
+                        <table className="sap-diff-table">
+                          <thead>
+                            <tr>
+                              <th>Order</th>
+                              <th>Level</th>
+                              <th>Material</th>
+                              <th>Target Plant</th>
+                              <th>Target Alt</th>
+                              <th>Components</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {copyOrder.map((bom, idx) => {
+                              const isMain = bom.depth === 0;
+                              return (
+                                <tr key={idx} style={{ background: isMain ? '#f0fdf4' : 'transparent' }}>
+                                  <td style={{ fontWeight: 600 }}>#{idx + 1} {isMain ? '(Final)' : ''}</td>
+                                  <td>{isMain ? 'Main BOM' : `Level ${bom.depth}`}</td>
+                                  <td className="sap-diff-field-name"><strong>{bom.material}</strong></td>
+                                  <td>{bom.targetPlant || preview?.targetPlant}</td>
+                                  <td className="sap-diff-new-val"><strong>Alt {bom.targetAlt || '1'}</strong></td>
+                                  <td>{bom.componentCount || bom.components?.length || 0}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
 
             <div style={{ marginTop: 10, fontSize: '12px', color: '#64748b' }}>
-              ℹ️ Executed directly via SAP GUI Scripting CS01 in active session. Source components will be copied and verified in CS03.
+              ℹ️ Executed directly via SAP GUI Scripting CS01 in active session. All BOMs in the hierarchy will be created bottom-up and recursively verified in CS03.
             </div>
           </div>
         )}
@@ -1089,8 +1019,7 @@ export default function ConfirmationCard({
             onClick={() => onConfirm(actionId, {
               reason: reason.trim(),
               prodConfirmation: prodConfirmation.trim(),
-              systemKey: targetSystem,
-              copySubBoms: type === 'copy_bom' ? Boolean(copySubBoms) : undefined
+              systemKey: targetSystem
             })}
             disabled={
               isExecuting ||
@@ -1122,9 +1051,7 @@ export default function ConfirmationCard({
                     : type === 'create'
                     ? 'Confirm Creation'
                     : type === 'copy_bom'
-                    ? (copySubBoms && preview?.subBomDependencies?.missingSubBoms?.length > 0
-                        ? `Confirm Copy BOM (${1 + preview.subBomDependencies.missingSubBoms.length} BOMs)`
-                        : 'Confirm Copy BOM')
+                    ? `Confirm Copy BOM${(preview?.copyOrder?.length || preview?.hierarchyMetrics?.totalBomsToCreate) > 1 ? ` (${preview?.copyOrder?.length || preview?.hierarchyMetrics?.totalBomsToCreate} BOMs)` : ''}`
                     : type === 'retry'
                     ? 'Confirm Job Retry'
                     : type === 'reprocess'

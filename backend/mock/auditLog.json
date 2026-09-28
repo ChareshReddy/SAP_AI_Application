@@ -1,0 +1,86 @@
+[
+  {
+    "logId": "audit_1790593267292_e656fb85",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "AUDIT_SUB",
+    "businessPartnerId": "AUDIT_SUB",
+    "task": "Sub-BOM Copy (AUDIT_SUB)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom AUDIT_SUB",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "AUDIT_SUB",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "1",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "RAW_A",
+          "quantity": "1",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM AUDIT_MAIN",
+    "actionId": "act_1790593267290_213a972d_bom_0_AUDIT_SUB",
+    "timestamp": "2026-09-28T11:01:07.292Z"
+  },
+  {
+    "logId": "audit_1790593267293_02c7a27d",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "AUDIT_MAIN",
+    "businessPartnerId": "AUDIT_MAIN",
+    "task": "Main BOM Copy (AUDIT_MAIN)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom AUDIT_MAIN",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "AUDIT_MAIN",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "1",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "AUDIT_SUB",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": true
+        }
+      ],
+      "warnings": [],
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Copy BOM from AUDIT_MAIN plant 1001 to plant 1012",
+    "actionId": "act_1790593267290_213a972d_bom_1_AUDIT_MAIN",
+    "timestamp": "2026-09-28T11:01:07.293Z"
+  }
+]

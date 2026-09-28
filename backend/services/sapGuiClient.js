@@ -179,7 +179,7 @@ export function resetMockBomDataset() {
  * @param {string[]} [alternatives=['1']]
  * @param {number} [componentCount=10]
  */
-export function setMockBomAlternatives(material, plant, bomUsage = '1', alternatives = ['1'], componentCount = 10) {
+export function setMockBomAlternatives(material, plant, bomUsage = '1', alternatives = ['1'], componentCount = 10, components = null) {
   const matUpper = String(material || '').trim().toUpperCase();
   const plantStr = String(plant || '').trim();
   const usageStr = String(bomUsage || '1').trim();
@@ -192,6 +192,7 @@ export function setMockBomAlternatives(material, plant, bomUsage = '1', alternat
   if (existing) {
     existing.availableAlternatives = alts;
     if (componentCount !== undefined) existing.componentCount = componentCount;
+    if (components) existing.components = components;
   } else {
     activeMockBomDataset.push({
       material: matUpper,
@@ -199,7 +200,7 @@ export function setMockBomAlternatives(material, plant, bomUsage = '1', alternat
       bomUsage: usageStr,
       availableAlternatives: alts,
       componentCount,
-      components: [{ itemCategory: 'L' }]
+      components: components || [{ itemCategory: 'L' }]
     });
   }
 }
@@ -2075,18 +2076,39 @@ export async function copyBomViaGui(params) {
     const existingTargetIndex = activeMockBomDataset.findIndex(
       (b) => b.material.toUpperCase() === cleanTargetMat && b.plant === cleanTargetPlant && b.bomUsage === cleanTargetUsage
     );
-    const targetEntry = {
-      material: cleanTargetMat,
-      plant: cleanTargetPlant,
-      bomUsage: cleanTargetUsage,
-      availableAlternatives: [cleanTargetAlt || '1'],
-      componentCount: srcComps.length || 1,
-      components: srcComps
-    };
+
+    let resolvedTargetAlt = cleanTargetAlt;
     if (existingTargetIndex >= 0) {
-      activeMockBomDataset[existingTargetIndex] = targetEntry;
+      const existing = activeMockBomDataset[existingTargetIndex];
+      const existingAlts = existing.availableAlternatives || ['1'];
+      resolvedTargetAlt = resolveNextAvailableAlternative(existingAlts, cleanTargetAlt);
+
+      if (!existing.availableAlternatives.includes(resolvedTargetAlt)) {
+        existing.availableAlternatives.push(resolvedTargetAlt);
+      }
+
+      // Preserve per-alternative components so existing alternatives are NOT overwritten
+      if (!existing.alternativeComponents) {
+        existing.alternativeComponents = {};
+        const firstAlt = existingAlts[0] || '1';
+        existing.alternativeComponents[firstAlt] = JSON.parse(JSON.stringify(existing.components || []));
+      }
+      existing.alternativeComponents[resolvedTargetAlt] = JSON.parse(JSON.stringify(srcComps));
+      existing.components = srcComps;
+      existing.componentCount = srcComps.length;
     } else {
-      activeMockBomDataset.push(targetEntry);
+      resolvedTargetAlt = resolveNextAvailableAlternative([], cleanTargetAlt);
+      activeMockBomDataset.push({
+        material: cleanTargetMat,
+        plant: cleanTargetPlant,
+        bomUsage: cleanTargetUsage,
+        availableAlternatives: [resolvedTargetAlt],
+        componentCount: srcComps.length || 1,
+        components: srcComps,
+        alternativeComponents: {
+          [resolvedTargetAlt]: JSON.parse(JSON.stringify(srcComps))
+        }
+      });
     }
 
     // Verify target in CS03 (evaluating dynamic assembly indicators)
@@ -2094,7 +2116,7 @@ export async function copyBomViaGui(params) {
       material: cleanTargetMat,
       plant: cleanTargetPlant,
       bomUsage: cleanTargetUsage,
-      alternativeBom: cleanTargetAlt || '1'
+      alternativeBom: resolvedTargetAlt
     });
 
     // Run structural comparison replacing count-only check
@@ -2122,7 +2144,7 @@ export async function copyBomViaGui(params) {
       material: cleanTargetMat,
       plant: cleanTargetPlant,
       bomUsage: cleanTargetUsage,
-      alternativeBom: cleanTargetAlt || '1',
+      alternativeBom: resolvedTargetAlt,
       validFrom: target.validFrom || '',
       components: targetCs03.components || [],
       warnings: comparison.warnings,
@@ -2136,10 +2158,11 @@ export async function copyBomViaGui(params) {
       warnings: comparison.warnings,
       code: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'BOM_COPIED_WITH_WARNINGS' : 'BOM_COPIED_AND_VERIFIED',
       message: comparison.status === 'SUCCESS_WITH_WARNINGS'
-        ? `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${cleanTargetAlt || '1'}) copied from ${cleanSourceMat}/${cleanSourcePlant}. [SUCCESS_WITH_WARNINGS: ${comparison.warnings.map(w => w.reason).join('; ')}]`
-        : `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${cleanTargetAlt || '1'}) copied from ${cleanSourceMat}/${cleanSourcePlant} and verified in CS03.`,
+        ? `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${resolvedTargetAlt}) copied from ${cleanSourceMat}/${cleanSourcePlant}. [SUCCESS_WITH_WARNINGS: ${comparison.warnings.map(w => w.reason).join('; ')}]`
+        : `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${resolvedTargetAlt}) copied from ${cleanSourceMat}/${cleanSourcePlant} and verified in CS03.`,
       before: null,
-      after: createdRecord
+      after: createdRecord,
+      alternativeBom: resolvedTargetAlt
     };
   }
 
@@ -3066,7 +3089,9 @@ export async function verifyBomInCs03(params) {
       }
 
       // Dynamically evaluate assembly indicators based on plant-level sub-BOM existence
-      const rawComps = match.components || [];
+      const rawComps = (cleanAlt && match.alternativeComponents && match.alternativeComponents[cleanAlt])
+        ? match.alternativeComponents[cleanAlt]
+        : (match.components || []);
       const evaluatedComps = rawComps.map(c => {
         let asm = Boolean(c.assembly);
         if (asm && c.material) {
@@ -3544,9 +3569,62 @@ export async function checkMaterialPlantExtension({ material, plant }) {
 }
 
 /**
- * Pre-flight sub-BOM dependency check for Copy BOM.
- * For every source component with Asm = true, recursively checks whether its BOM
- * exists in the target plant, with cycle protection and a maximum recursion depth of 5.
+ * Resolves the next available BOM alternative number.
+ * If requestedAlternative is specified and not present in existingAlternatives, it is returned.
+ * If requestedAlternative is already used or not specified, finds the lowest positive integer alternative (1, 2, 3...)
+ * that is not currently present in existingAlternatives.
+ *
+ * @param {Array<string|number>} existingAlternatives - List of already existing alternative numbers (e.g. ['1', '2', '3', '4'])
+ * @param {string|number} [requestedAlternative=''] - Desired alternative number (e.g. '1' or '2')
+ * @returns {string} The resolved alternative number (e.g. '5')
+ */
+export function resolveNextAvailableAlternative(existingAlternatives = [], requestedAlternative = '') {
+  const cleanRequested = String(requestedAlternative ?? '').trim();
+  const existingSet = new Set((existingAlternatives || []).map((a) => String(a).trim()));
+
+  if (cleanRequested && !existingSet.has(cleanRequested)) {
+    return cleanRequested;
+  }
+
+  let candidate = 1;
+  while (existingSet.has(String(candidate))) {
+    candidate++;
+  }
+  return String(candidate);
+}
+
+/**
+ * Formats a hierarchical BOM tree node into a clean text representation for display.
+ *
+ * @param {object} node
+ * @param {string} [prefix='']
+ * @param {boolean} [isTail=true]
+ * @returns {string}
+ */
+export function formatHierarchyTree(node, prefix = '', isTail = true) {
+  if (!node) return '';
+  const lines = [];
+  const connector = prefix ? (isTail ? ' └── ' : ' ├── ') : '';
+  const altText = node.targetAlt ? `Alt ${node.targetAlt}` : '';
+  const plantText = node.targetPlant ? `Plant ${node.targetPlant}` : '';
+  const compsText = `${node.componentCount || 0} component${node.componentCount === 1 ? '' : 's'}`;
+  const details = [plantText, altText, compsText].filter(Boolean).join(', ');
+  lines.push(`${prefix}${connector}${node.material} (${details})`);
+
+  const children = node.children || [];
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    const childIsTail = i === children.length - 1;
+    const childPrefix = prefix ? prefix + (isTail ? '     ' : ' │   ') : '';
+    lines.push(formatHierarchyTree(child, childPrefix, childIsTail));
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Discovers and builds the complete BOM hierarchy from source to target.
+ * Resolves next available alternatives in the target plant, detects cycles,
+ * enforces maxDepth (5), and builds a strict bottom-up copy execution order.
  *
  * @param {object} params
  * @param {object} params.source - { material, plant, bomUsage, alternativeBom }
@@ -3554,14 +3632,14 @@ export async function checkMaterialPlantExtension({ material, plant }) {
  * @param {number} [params.maxDepth=5]
  * @returns {Promise<{
  *   mainBom: object,
- *   missingSubBoms: Array<object>,
- *   existingSubBoms: Array<object>,
+ *   tree: object,
+ *   copyOrder: Array<object>,
+ *   metrics: { totalLevels: number, totalBomsToCreate: number, totalComponents: number, totalAssemblies: number },
  *   unextendedMaterials: Array<object>,
- *   totalBomsMainOnly: number,
- *   totalBomsWithSub: number
+ *   cycleDetected: boolean
  * }>}
  */
-export async function checkBomSubDependencies({
+export async function discoverBomHierarchy({
   source,
   target,
   maxDepth = 5
@@ -3576,12 +3654,11 @@ export async function checkBomSubDependencies({
   const cleanTgtUsage = String(target?.bomUsage || '1').trim();
   const cleanTgtAlt = String(target?.alternativeBom || '').trim();
 
-  const missingSubBoms = [];
-  const existingSubBoms = [];
   const unextendedMaterials = [];
-  const visitedMaterials = new Set([cleanSrcMat]);
+  let cycleDetected = false;
+  const bomsMap = new Map();
 
-  // Read source BOM components via CS03
+  // Read source main BOM
   const srcBomRes = await verifyBomInCs03({
     material: cleanSrcMat,
     plant: cleanSrcPlant,
@@ -3591,91 +3668,294 @@ export async function checkBomSubDependencies({
 
   const srcComponents = srcBomRes.components || [];
 
-  async function inspectLevel(components, currentSourcePlant, currentTargetPlant, currentUsage, depth) {
+  // Read target main BOM to find existing alternatives
+  const targetBomRes = await verifyBomInCs03({
+    material: cleanTgtMat,
+    plant: cleanTgtPlant,
+    bomUsage: cleanTgtUsage
+  });
+
+  const targetMainAlts = targetBomRes.availableAlternatives || [];
+  const mainTargetAlt = resolveNextAvailableAlternative(targetMainAlts, cleanTgtAlt);
+
+  // Root tree node
+  const rootTree = {
+    material: cleanTgtMat,
+    sourceMaterial: cleanSrcMat,
+    sourcePlant: cleanSrcPlant,
+    targetPlant: cleanTgtPlant,
+    bomUsage: cleanTgtUsage,
+    sourceAlt: cleanSrcAlt || srcBomRes.availableAlternatives?.[0] || '1',
+    targetAlt: mainTargetAlt,
+    depth: 0,
+    componentCount: srcComponents.length,
+    components: srcComponents,
+    children: [],
+    existingTargetAlternatives: targetMainAlts
+  };
+
+  async function inspectLevel(components, currentSrcPlant, currentTgtPlant, currentUsage, depth, ancestorPath, parentNode) {
     if (depth > maxDepth) return;
 
     for (const comp of components) {
-      if (!comp.assembly) continue;
+      if (!toBool(comp.assembly)) continue;
       const compMat = String(comp.material || '').trim().toUpperCase();
-      if (!compMat || visitedMaterials.has(compMat)) {
-        continue; // Cycle protection
-      }
-      visitedMaterials.add(compMat);
+      if (!compMat) continue;
 
-      // Check if material is extended to target plant
-      const extCheck = await checkMaterialPlantExtension({ material: compMat, plant: currentTargetPlant });
+      // Cycle detection
+      if (ancestorPath.has(compMat)) {
+        cycleDetected = true;
+        continue;
+      }
+
+      // Material plant extension check
+      const extCheck = await checkMaterialPlantExtension({ material: compMat, plant: currentTgtPlant });
       if (!extCheck.extended) {
         unextendedMaterials.push({
           material: compMat,
-          plant: currentTargetPlant,
-          reason: `cannot copy: material not in plant ${currentTargetPlant}`,
+          plant: currentTgtPlant,
+          reason: `cannot copy: material not in plant ${currentTgtPlant}`,
           description: comp.description || ''
         });
-        continue; // Do not attempt sub-BOM copy
+        continue;
       }
 
-      // Check if sub-BOM already exists in target plant
-      const targetSubRes = await verifyBomInCs03({
+      // Check sub-BOM source definition
+      const sourceSubRes = await verifyBomInCs03({
         material: compMat,
-        plant: currentTargetPlant,
+        plant: currentSrcPlant,
         bomUsage: currentUsage
       });
 
-      if (targetSubRes.exists) {
-        existingSubBoms.push({
-          material: compMat,
-          plant: currentTargetPlant,
-          bomUsage: currentUsage,
-          componentCount: targetSubRes.componentCount || targetSubRes.components?.length || 0,
-          description: comp.description || ''
-        });
-      } else {
-        // Missing in target plant: check source plant sub-BOM
-        const sourceSubRes = await verifyBomInCs03({
-          material: compMat,
-          plant: currentSourcePlant,
-          bomUsage: currentUsage
-        });
+      const subComps = sourceSubRes.components || [];
 
-        const subCount = sourceSubRes.componentCount || sourceSubRes.components?.length || 0;
-        missingSubBoms.push({
-          material: compMat,
-          sourcePlant: currentSourcePlant,
-          targetPlant: currentTargetPlant,
-          bomUsage: currentUsage,
-          componentCount: subCount,
-          description: comp.description || '',
-          depth
-        });
+      // Check target alternatives for sub-BOM
+      const targetSubRes = await verifyBomInCs03({
+        material: compMat,
+        plant: currentTgtPlant,
+        bomUsage: currentUsage
+      });
 
-        // Recurse into this sub-BOM's components in source plant if depth < maxDepth
-        if (depth < maxDepth && sourceSubRes.components?.length > 0) {
-          await inspectLevel(sourceSubRes.components, currentSourcePlant, currentTargetPlant, currentUsage, depth + 1);
-        }
+      const targetSubAlts = targetSubRes.availableAlternatives || [];
+      const subTargetAlt = resolveNextAvailableAlternative(targetSubAlts, '');
+
+      const childNode = {
+        material: compMat,
+        sourceMaterial: compMat,
+        sourcePlant: currentSrcPlant,
+        targetPlant: currentTgtPlant,
+        bomUsage: currentUsage,
+        sourceAlt: sourceSubRes.availableAlternatives?.[0] || '1',
+        targetAlt: subTargetAlt,
+        depth,
+        componentCount: subComps.length,
+        components: subComps,
+        children: [],
+        description: comp.description || '',
+        existingTargetAlternatives: targetSubAlts
+      };
+
+      if (parentNode && parentNode.children) {
+        parentNode.children.push(childNode);
+      }
+
+      const existingBom = bomsMap.get(compMat);
+      if (!existingBom || depth > existingBom.depth) {
+        bomsMap.set(compMat, childNode);
+      }
+
+      if (depth < maxDepth && subComps.length > 0) {
+        const nextAncestors = new Set(ancestorPath);
+        nextAncestors.add(compMat);
+        await inspectLevel(subComps, currentSrcPlant, currentTgtPlant, currentUsage, depth + 1, nextAncestors, childNode);
       }
     }
   }
 
-  await inspectLevel(srcComponents, cleanSrcPlant, cleanTgtPlant, cleanSrcUsage, 1);
+  const initialAncestors = new Set([cleanSrcMat]);
+  await inspectLevel(srcComponents, cleanSrcPlant, cleanTgtPlant, cleanSrcUsage, 1, initialAncestors, rootTree);
 
-  // Execution order: sub-BOMs first (deepest first)
-  missingSubBoms.sort((a, b) => b.depth - a.depth);
+  // Sub-BOMs sorted by depth descending (deepest first)
+  const subBoms = Array.from(bomsMap.values()).sort((a, b) => b.depth - a.depth);
+
+  const mainBomItem = {
+    material: cleanTgtMat,
+    sourceMaterial: cleanSrcMat,
+    sourcePlant: cleanSrcPlant,
+    targetPlant: cleanTgtPlant,
+    bomUsage: cleanTgtUsage,
+    sourceAlt: cleanSrcAlt || srcBomRes.availableAlternatives?.[0] || '1',
+    targetAlt: mainTargetAlt,
+    depth: 0,
+    componentCount: srcComponents.length,
+    components: srcComponents,
+    existingTargetAlternatives: targetMainAlts
+  };
+
+  // Bottom-up copy order: deepest sub-BOMs first, main BOM last
+  const copyOrder = [...subBoms, mainBomItem];
+
+  const maxLevel = copyOrder.reduce((max, b) => Math.max(max, (b.depth || 0) + 1), 1);
+  const totalComponents = copyOrder.reduce((sum, b) => sum + (b.componentCount || 0), 0);
+  const totalAssemblies = copyOrder.reduce((sum, b) => sum + (b.components || []).filter(c => toBool(c.assembly)).length, 0);
 
   return {
+    mainBom: mainBomItem,
+    tree: rootTree,
+    copyOrder,
+    metrics: {
+      totalLevels: maxLevel,
+      totalBomsToCreate: copyOrder.length,
+      totalComponents,
+      totalAssemblies
+    },
+    unextendedMaterials,
+    cycleDetected
+  };
+}
+
+/**
+ * Recursively verifies all BOMs in the hierarchy in CS03 after creation.
+ * Checks component count, item, material, quantity, unit, item category, and assembly indicator.
+ *
+ * @param {object} params
+ * @param {Array<object>} params.copyOrder - Ordered list of BOMs created in hierarchy
+ * @param {string} [params.targetPlant]
+ * @param {string} [params.bomUsage]
+ * @returns {Promise<{
+ *   match: boolean,
+ *   status: 'SUCCESS' | 'FAILURE',
+ *   differences: Array<string>,
+ *   verifiedBoms: Array<object>,
+ *   verifiedCount: number,
+ *   totalExpected: number,
+ *   summary: string
+ * }>}
+ */
+export async function verifyHierarchyStructure({
+  copyOrder = [],
+  targetPlant = '',
+  bomUsage = '1'
+}) {
+  const verifiedBoms = [];
+  const allDifferences = [];
+
+  for (const bomItem of copyOrder) {
+    const tgtMat = bomItem.material;
+    const tgtPlt = bomItem.targetPlant || targetPlant;
+    const tgtUsg = bomItem.bomUsage || bomUsage;
+    const tgtAlt = bomItem.targetAlt || '1';
+
+    const cs03Res = await verifyBomInCs03({
+      material: tgtMat,
+      plant: tgtPlt,
+      bomUsage: tgtUsg,
+      alternativeBom: tgtAlt
+    });
+
+    if (!cs03Res.exists) {
+      allDifferences.push(`Target BOM ${tgtMat} (Plant ${tgtPlt}, Alt ${tgtAlt}) does not exist in CS03 after creation.`);
+      continue;
+    }
+
+    const compResult = compareBomStructures({
+      sourceComponents: bomItem.components || [],
+      targetComponents: cs03Res.components || [],
+      targetPlant: tgtPlt,
+      copiedMainOnly: false
+    });
+
+    if (!compResult.match) {
+      allDifferences.push(
+        `Structural mismatch in BOM ${tgtMat} (Plant ${tgtPlt}, Alt ${tgtAlt}): ${compResult.differences.join('; ')}`
+      );
+    } else {
+      verifiedBoms.push({
+        material: tgtMat,
+        plant: tgtPlt,
+        alternativeBom: tgtAlt,
+        componentCount: cs03Res.components?.length || 0,
+        status: 'VERIFIED_100_PERCENT'
+      });
+    }
+  }
+
+  const match = allDifferences.length === 0;
+  return {
+    match,
+    status: match ? 'SUCCESS' : 'FAILURE',
+    differences: allDifferences,
+    verifiedBoms,
+    verifiedCount: verifiedBoms.length,
+    totalExpected: copyOrder.length,
+    summary: match
+      ? `All ${verifiedBoms.length} BOM(s) in hierarchy verified with 100% component and assembly parity in CS03.`
+      : `Hierarchy verification failed with ${allDifferences.length} difference(s): ${allDifferences.join(' | ')}`
+  };
+}
+
+/**
+ * Pre-flight sub-BOM dependency check (retained for backward compatibility).
+ * Delegates directly to discoverBomHierarchy and maps results to the expected shape.
+ *
+ * @param {object} params
+ * @returns {Promise<object>}
+ */
+export async function checkBomSubDependencies({
+  source,
+  target,
+  maxDepth = 5
+}) {
+  const hierarchy = await discoverBomHierarchy({ source, target, maxDepth });
+  const missingSubBoms = hierarchy.copyOrder.filter((b) => b.depth > 0);
+  const existingSubBoms = [];
+
+  const cleanTgtPlant = String(target?.plant || '').trim();
+  const cleanTgtUsage = String(target?.bomUsage || '1').trim();
+
+  for (const comp of hierarchy.mainBom.components || []) {
+    if (!toBool(comp.assembly)) continue;
+    const compMat = String(comp.material || '').trim().toUpperCase();
+    if (compMat && !missingSubBoms.some((b) => b.material === compMat)) {
+      const tgtRes = await verifyBomInCs03({ material: compMat, plant: cleanTgtPlant, bomUsage: cleanTgtUsage });
+      if (tgtRes.exists) {
+        existingSubBoms.push({
+          material: compMat,
+          plant: cleanTgtPlant,
+          bomUsage: cleanTgtUsage,
+          componentCount: tgtRes.componentCount || tgtRes.components?.length || 0,
+          description: comp.description || ''
+        });
+      }
+    }
+  }
+
+  return {
+    ...hierarchy,
     mainBom: {
-      material: cleanTgtMat,
-      sourcePlant: cleanSrcPlant,
-      targetPlant: cleanTgtPlant,
-      bomUsage: cleanTgtUsage,
-      alternativeBom: cleanTgtAlt || '1',
-      componentCount: srcComponents.length
+      material: hierarchy.mainBom.material,
+      sourcePlant: hierarchy.mainBom.sourcePlant,
+      targetPlant: hierarchy.mainBom.targetPlant,
+      bomUsage: hierarchy.mainBom.bomUsage,
+      alternativeBom: hierarchy.mainBom.targetAlt || '1',
+      componentCount: hierarchy.mainBom.componentCount
     },
     missingSubBoms,
     existingSubBoms,
-    unextendedMaterials,
+    unextendedMaterials: hierarchy.unextendedMaterials,
     totalBomsMainOnly: 1,
-    totalBomsWithSub: 1 + missingSubBoms.length
+    totalBomsWithSub: hierarchy.copyOrder.length
   };
+}
+
+function toBool(val) {
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'string') {
+    const s = val.trim().toLowerCase();
+    return s === 'true' || s === 'x' || s === '1';
+  }
+  if (typeof val === 'number') return val !== 0;
+  return false;
 }
 
 /**
@@ -3767,8 +4047,8 @@ export function compareBomStructures({
     }
 
     // Compare Assembly indicator (Asm)
-    const sAsm = Boolean(sc.assembly);
-    const tAsm = Boolean(tc.assembly);
+    const sAsm = toBool(sc.assembly);
+    const tAsm = toBool(tc.assembly);
 
     if (sAsm !== tAsm) {
       const isMissingInTarget =
@@ -3794,7 +4074,7 @@ export function compareBomStructures({
       } else {
         // UNEXPLAINED difference: FAILURE!
         differences.push(
-          `Unexplained Assembly indicator mismatch for Item ${scItem} (${scMat}): source Asm=${sAsm}, target Asm=${tAsm}`
+          `Assembly indicator mismatch for Item ${scItem} (${scMat}): source Asm=${sAsm}, target Asm=${tAsm}`
         );
       }
     }
@@ -4792,6 +5072,10 @@ export default {
   verifyBom,
   checkMaterialPlantExtension,
   checkBomSubDependencies,
+  discoverBomHierarchy,
+  resolveNextAvailableAlternative,
+  formatHierarchyTree,
+  verifyHierarchyStructure,
   compareBomStructures,
   validateSourceBom,
   getMockBomDataset,
