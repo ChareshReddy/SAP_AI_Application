@@ -18,7 +18,8 @@ const testFiles = [
   'test/sapSessionMonitoring.test.js',
   'test/deleteBomVerification.test.js',
   'test/sapMultiSession.test.js',
-  'test/bomStructuralPreservation.test.js'
+  'test/bomStructuralPreservation.test.js',
+  'test/vbsSyntaxValidation.test.js'
 ];
 
 const env = {

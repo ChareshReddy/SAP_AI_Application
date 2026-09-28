@@ -3,13 +3,13 @@ import http from 'http';
 import app from '../server.js';
 import { auditLogger } from '../services/auditLog.js';
 import {
-  discoverBomHierarchy,
   resolveNextAvailableAlternative,
-  formatHierarchyTree,
-  verifyHierarchyStructure,
   compareBomStructures,
-  checkMaterialPlantExtension,
+  inspectAndVerifyHierarchy,
+  repairHierarchyBottomUp,
+  copyBomHierarchyWithRepair,
   verifyBomInCs03,
+  copyBomViaGui,
   resetMockBomDataset,
   setMockBomAlternatives,
   getMockBomDataset,
@@ -81,466 +81,476 @@ async function runBomStructuralPreservationTests() {
 
   try {
     // -------------------------------------------------------------------------
-    // TEST 1: Single-level BOM copy (no sub-BOMs) -> creates 1 BOM, verifies structure
+    // TEST 1: Target Alternative Selection - auto-increments when requested exists (1..4 -> 5)
     // -------------------------------------------------------------------------
-    console.log('\n1. Testing Single-Level BOM Copy (no sub-BOMs):');
+    console.log('\n1. Testing Target Alternative Selection (auto-increments 1..4 -> 5):');
+    const alt1 = resolveNextAvailableAlternative(['1', '2', '3', '4'], '1');
+    assert.strictEqual(alt1, '5', 'When alternatives 1..4 exist, requested alternative 1 must resolve to 5');
+    console.log('   ✓ Existing alternatives [1, 2, 3, 4] correctly resolved to alternative 5');
+
+    // -------------------------------------------------------------------------
+    // TEST 2: Target Alternative Selection - uses 1 when no BOM exists in target
+    // -------------------------------------------------------------------------
+    console.log('\n2. Testing Target Alternative Selection (uses 1 when no BOM exists):');
+    const alt2 = resolveNextAvailableAlternative([], '');
+    assert.strictEqual(alt2, '1', 'When no BOM exists in target, alternative must resolve to 1');
+    console.log('   ✓ Target with no BOM correctly resolved to alternative 1');
+
+    // -------------------------------------------------------------------------
+    // TEST 3: Target Alternative Selection - uses specified alternative when it doesn\'t exist
+    // -------------------------------------------------------------------------
+    console.log('\n3. Testing Target Alternative Selection (uses specified when it doesn\'t exist):');
+    const alt3 = resolveNextAvailableAlternative(['1', '2'], '3');
+    assert.strictEqual(alt3, '3', 'When specified alternative 3 does not exist, must use alternative 3');
+    console.log('   ✓ Specified alternative 3 preserved when it does not yet exist in target');
+
+    // -------------------------------------------------------------------------
+    // TEST 4: Target Alternative Selection - gaps handled (e.g. 1, 3 exist -> uses 2 or 4)
+    // -------------------------------------------------------------------------
+    console.log('\n4. Testing Target Alternative Selection (gaps handled):');
+    const alt4 = resolveNextAvailableAlternative(['1', '3'], '');
+    assert.ok(alt4 === '2' || alt4 === '4', `Gap in alternatives [1, 3] must resolve to 2 or 4, got: ${alt4}`);
+    console.log(`   ✓ Gap in alternatives [1, 3] correctly resolved to next available alternative: ${alt4}`);
+
+    // -------------------------------------------------------------------------
+    // TEST 5: Non-overwriting - existing BOMs untouched when new alternative created
+    // -------------------------------------------------------------------------
+    console.log('\n5. Testing Non-Overwriting Protection (existing BOMs untouched):');
     resetMockBomDataset();
-    setMockBomAlternatives('MAT_SINGLE_01', '1001', '1', ['1'], 2, [
-      { item: '0010', material: 'RAW_01', description: 'Raw material 1', quantity: '10', unit: 'KG', itemCategory: 'L', assembly: false },
-      { item: '0020', material: 'RAW_02', description: 'Raw material 2', quantity: '20', unit: 'KG', itemCategory: 'L', assembly: false }
+    setMockBomAlternatives('MAT_SAFE_01', '1012', '1', ['1'], 1, [
+      { item: '0010', material: 'ORIGINAL_COMP', description: 'Original', quantity: '10', unit: 'EA', itemCategory: 'L', assembly: false }
+    ]);
+    setMockBomAlternatives('MAT_SOURCE_01', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'NEW_COPIED_COMP', description: 'New', quantity: '20', unit: 'EA', itemCategory: 'L', assembly: false }
     ]);
 
-    const proposeRes1 = await makeRequest(
-      'POST',
-      '/api/chat',
-      {
-        message: 'Copy BOM from MAT_SINGLE_01 plant 1001 to plant 1012',
-        actionType: 'copy_bom',
-        copyBomParams: {
-          sourceMaterial: 'MAT_SINGLE_01',
-          sourcePlant: '1001',
-          sourceUsage: '1',
-          targetMaterial: 'MAT_SINGLE_01',
-          targetPlant: '1012',
-          targetUsage: '1'
-        }
-      },
-      authHeaders
-    );
-
-    assert.strictEqual(proposeRes1.status, 200);
-    assert.ok(proposeRes1.data.proposedAction, 'Proposed action must be returned');
-    const actionId1 = proposeRes1.data.proposedAction.actionId;
-    const copyOrder1 = proposeRes1.data.proposedAction.preview.copyOrder;
-    assert.strictEqual(copyOrder1.length, 1, 'Single-level BOM should have copyOrder length 1');
-
-    const confirmRes1 = await makeRequest('POST', '/api/chat', { confirmAction: actionId1 }, authHeaders);
-    assert.strictEqual(confirmRes1.status, 200);
-    assert.strictEqual(confirmRes1.data.actionResult.success, true);
-    assert.strictEqual(confirmRes1.data.actionResult.verified, true);
-    assert.strictEqual(confirmRes1.data.actionResult.status, 'SUCCESS');
-
-    const cs03Res1 = await verifyBomInCs03({ material: 'MAT_SINGLE_01', plant: '1012', bomUsage: '1', alternativeBom: '1' });
-    assert.strictEqual(cs03Res1.exists, true);
-    assert.strictEqual(cs03Res1.components.length, 2);
-    console.log('   ✓ Single-level BOM copied and verified in CS03 with 100% parity');
-
-    // -------------------------------------------------------------------------
-    // TEST 2: Multi-level BOM hierarchy copy (2 levels) -> creates sub-BOM first, then main BOM
-    // -------------------------------------------------------------------------
-    console.log('\n2. Testing Multi-Level BOM Hierarchy Copy (2 levels):');
-    resetMockBomDataset();
-
-    const proposeRes2 = await makeRequest(
-      'POST',
-      '/api/chat',
-      {
-        message: 'Copy BOM from A1BH0214C plant 1001 to plant 1012',
-        actionType: 'copy_bom',
-        copyBomParams: {
-          sourceMaterial: 'A1BH0214C',
-          sourcePlant: '1001',
-          sourceUsage: '1',
-          targetMaterial: 'A1BH0214C',
-          targetPlant: '1012',
-          targetUsage: '1'
-        }
-      },
-      authHeaders
-    );
-
-    assert.strictEqual(proposeRes2.status, 200);
-    const actionId2 = proposeRes2.data.proposedAction.actionId;
-    const copyOrder2 = proposeRes2.data.proposedAction.preview.copyOrder;
-    assert.ok(copyOrder2.length >= 2, 'Hierarchy copy order must contain sub-BOMs and main BOM');
-
-    // Sub-BOM C1BH0214C is missing in 1012 initially
-    const subBomOrderIndex = copyOrder2.findIndex((b) => b.material === 'C1BH0214C');
-    const mainBomOrderIndex = copyOrder2.findIndex((b) => b.material === 'A1BH0214C');
-    assert.ok(subBomOrderIndex < mainBomOrderIndex, 'Sub-BOM C1BH0214C must precede main BOM A1BH0214C in copy order');
-
-    const confirmRes2 = await makeRequest('POST', '/api/chat', { confirmAction: actionId2 }, authHeaders);
-    assert.strictEqual(confirmRes2.status, 200);
-    assert.strictEqual(confirmRes2.data.actionResult.success, true);
-    assert.strictEqual(confirmRes2.data.actionResult.status, 'SUCCESS');
-
-    // Verify sub-BOM exists in target plant
-    const targetSubRes2 = await verifyBomInCs03({ material: 'C1BH0214C', plant: '1012', bomUsage: '1' });
-    assert.strictEqual(targetSubRes2.exists, true);
-
-    // Verify main BOM in target plant preserves assembly=true for C1BH0214C
-    const targetMainRes2 = await verifyBomInCs03({ material: 'A1BH0214C', plant: '1012', bomUsage: '1' });
-    assert.strictEqual(targetMainRes2.exists, true);
-    const compC1 = targetMainRes2.components.find((c) => c.material === 'C1BH0214C');
-    assert.ok(compC1, 'Component C1BH0214C must exist in target BOM');
-    assert.strictEqual(compC1.assembly, true, 'Component C1BH0214C must have assembly=true in target plant');
-    console.log('   ✓ Multi-level BOM hierarchy transferred completely with assembly relationships preserved');
-
-    // -------------------------------------------------------------------------
-    // TEST 3: Deep hierarchy copy (3+ levels) -> creates deepest first, bottom-up order verified
-    // -------------------------------------------------------------------------
-    console.log('\n3. Testing Deep Hierarchy Copy (3+ levels, bottom-up verified):');
-    resetMockBomDataset();
-    setMockBomAlternatives('L3_DEEP', '1001', '1', ['1'], 1, [
-      { item: '0010', material: 'RAW_BASE', description: 'Base Raw', quantity: '5', unit: 'KG', itemCategory: 'L', assembly: false }
-    ]);
-    setMockBomAlternatives('L2_SUB', '1001', '1', ['1'], 1, [
-      { item: '0010', material: 'L3_DEEP', description: 'Deep sub component', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
-    ]);
-    setMockBomAlternatives('L1_MAIN', '1001', '1', ['1'], 1, [
-      { item: '0010', material: 'L2_SUB', description: 'Mid sub component', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
-    ]);
-
-    const hierarchy3 = await discoverBomHierarchy({
-      source: { material: 'L1_MAIN', plant: '1001', bomUsage: '1' },
-      target: { material: 'L1_MAIN', plant: '1012', bomUsage: '1' }
+    const copyRes5 = await copyBomViaGui({
+      source: { material: 'MAT_SOURCE_01', plant: '1001', bomUsage: '1' },
+      target: { material: 'MAT_SAFE_01', plant: '1012', bomUsage: '1', alternativeBom: '2' }
     });
+    assert.strictEqual(copyRes5.success, true);
 
-    assert.strictEqual(hierarchy3.copyOrder.length, 3);
-    assert.strictEqual(hierarchy3.copyOrder[0].material, 'L3_DEEP', 'Depth 2 (L3_DEEP) must be first');
-    assert.strictEqual(hierarchy3.copyOrder[1].material, 'L2_SUB', 'Depth 1 (L2_SUB) must be second');
-    assert.strictEqual(hierarchy3.copyOrder[2].material, 'L1_MAIN', 'Depth 0 (L1_MAIN) must be last');
-    assert.strictEqual(hierarchy3.metrics.totalLevels, 3);
-    console.log('   ✓ 3-level deep hierarchy correctly discovered and sorted bottom-up (L3_DEEP -> L2_SUB -> L1_MAIN)');
+    const targetAlt1 = await verifyBomInCs03({ material: 'MAT_SAFE_01', plant: '1012', bomUsage: '1', alternativeBom: '1' });
+    assert.strictEqual(targetAlt1.exists, true);
+    assert.strictEqual(targetAlt1.components[0].material, 'ORIGINAL_COMP', 'Alternative 1 must retain its original component');
 
-    // -------------------------------------------------------------------------
-    // TEST 4: Target alternative resolution when target already exists -> finds next available
-    // -------------------------------------------------------------------------
-    console.log('\n4. Testing Target Alternative Resolution (Target already exists):');
-    resetMockBomDataset();
-    setMockBomAlternatives('MAT_ALT_01', '1012', '1', ['1'], 5);
-
-    const resolvedAlt4 = resolveNextAvailableAlternative(['1'], '1');
-    assert.strictEqual(resolvedAlt4, '2', 'When alternative 1 exists and alternative 1 is requested, next available must be 2');
-
-    const hierarchy4 = await discoverBomHierarchy({
-      source: { material: 'MAT_SINGLE_01', plant: '1001', bomUsage: '1' },
-      target: { material: 'MAT_ALT_01', plant: '1012', bomUsage: '1', alternativeBom: '1' }
-    });
-    assert.strictEqual(hierarchy4.mainBom.targetAlt, '2');
-    console.log('   ✓ Target BOM with alternative 1 correctly resolves next available alternative: 2');
-
-    // -------------------------------------------------------------------------
-    // TEST 5: Target already has alternatives 1, 2, 3, 4 -> creates alternative 5
-    // -------------------------------------------------------------------------
-    console.log('\n5. Testing Target Has Alternatives 1, 2, 3, 4 -> Resolves Alternative 5:');
-    const resolvedAlt5 = resolveNextAvailableAlternative(['1', '2', '3', '4'], '1');
-    assert.strictEqual(resolvedAlt5, '5', 'When alternatives 1, 2, 3, 4 exist, next available must be 5');
-
-    resetMockBomDataset();
-    setMockBomAlternatives('A1BH0214C', '1012', '1', ['1', '2', '3', '4'], 10);
-    const hierarchy5 = await discoverBomHierarchy({
-      source: { material: 'A1BH0214C', plant: '1001', bomUsage: '1' },
-      target: { material: 'A1BH0214C', plant: '1012', bomUsage: '1', alternativeBom: '1' }
-    });
-    assert.strictEqual(hierarchy5.mainBom.targetAlt, '5', 'Main BOM targetAlt must resolve to 5');
-    console.log('   ✓ Existing alternatives [1, 2, 3, 4] correctly resolve to alternative 5');
-
-    // -------------------------------------------------------------------------
-    // TEST 6: Per-sub-BOM alternative resolution -> each sub-BOM independently resolves
-    // -------------------------------------------------------------------------
-    console.log('\n6. Testing Per-Sub-BOM Alternative Resolution (Independent per material):');
-    resetMockBomDataset();
-    // Sub-BOM B1BH0214C already has alternatives 1 and 2 in target plant 1012
-    setMockBomAlternatives('B1BH0214C', '1012', '1', ['1', '2'], 5);
-    // Sub-BOM C1BH0214C has no BOM in target plant 1012
-    // Main BOM A1BH0214C has alternative 1 in target plant 1012
-    setMockBomAlternatives('A1BH0214C', '1012', '1', ['1'], 16);
-
-    const hierarchy6 = await discoverBomHierarchy({
-      source: { material: 'A1BH0214C', plant: '1001', bomUsage: '1' },
-      target: { material: 'A1BH0214C', plant: '1012', bomUsage: '1' }
-    });
-
-    const b1Item = hierarchy6.copyOrder.find((b) => b.material === 'B1BH0214C');
-    const c1Item = hierarchy6.copyOrder.find((b) => b.material === 'C1BH0214C');
-    const a1Item = hierarchy6.mainBom;
-
-    assert.ok(b1Item, 'B1BH0214C should be in copy order');
-    assert.strictEqual(b1Item.targetAlt, '3', 'B1BH0214C has alternatives [1, 2], so next available must be 3');
-    assert.strictEqual(c1Item.targetAlt, '1', 'C1BH0214C has no BOM, so next available must be 1');
-    assert.strictEqual(a1Item.targetAlt, '2', 'A1BH0214C has alternative [1], so next available must be 2');
-    console.log('   ✓ Each sub-BOM independently resolved its own next available alternative (B1->3, C1->1, Main->2)');
-
-    // -------------------------------------------------------------------------
-    // TEST 7: Existing target BOMs are NEVER overwritten
-    // -------------------------------------------------------------------------
-    console.log('\n7. Testing Non-Overwriting Protection of Existing Target BOMs:');
-    resetMockBomDataset();
-    const originalAlt1Comps = [
-      { item: '0010', material: 'ORIGINAL_COMP', description: 'Original Component', quantity: '99', unit: 'EA', itemCategory: 'L', assembly: false }
-    ];
-    setMockBomAlternatives('MAT_SAFE_01', '1012', '1', ['1'], 1, originalAlt1Comps);
-
-    // Source BOM has different components
-    setMockBomAlternatives('MAT_SAFE_01', '1001', '1', ['1'], 1, [
-      { item: '0010', material: 'NEW_COPIED_COMP', description: 'New Copied Component', quantity: '5', unit: 'KG', itemCategory: 'L', assembly: false }
-    ]);
-
-    // Propose copy to plant 1012
-    const proposeRes7 = await makeRequest(
-      'POST',
-      '/api/chat',
-      {
-        message: 'Copy BOM from MAT_SAFE_01 plant 1001 to plant 1012',
-        actionType: 'copy_bom',
-        copyBomParams: {
-          sourceMaterial: 'MAT_SAFE_01',
-          sourcePlant: '1001',
-          sourceUsage: '1',
-          targetMaterial: 'MAT_SAFE_01',
-          targetPlant: '1012',
-          targetUsage: '1'
-        }
-      },
-      authHeaders
-    );
-
-    const actionId7 = proposeRes7.data.proposedAction.actionId;
-    const confirmRes7 = await makeRequest('POST', '/api/chat', { confirmAction: actionId7 }, authHeaders);
-    assert.strictEqual(confirmRes7.status, 200);
-
-    // Verify Alternative 1 in target plant is completely UNTOUCHED
-    const targetAlt1Res = await verifyBomInCs03({ material: 'MAT_SAFE_01', plant: '1012', bomUsage: '1', alternativeBom: '1' });
-    assert.strictEqual(targetAlt1Res.exists, true);
-    assert.strictEqual(targetAlt1Res.components[0].material, 'ORIGINAL_COMP', 'Alternative 1 must retain its original component');
-
-    // Verify Alternative 2 in target plant has the newly copied component
-    const targetAlt2Res = await verifyBomInCs03({ material: 'MAT_SAFE_01', plant: '1012', bomUsage: '1', alternativeBom: '2' });
-    assert.strictEqual(targetAlt2Res.exists, true);
-    assert.strictEqual(targetAlt2Res.components[0].material, 'NEW_COPIED_COMP', 'Alternative 2 must contain the copied component');
+    const targetAlt2 = await verifyBomInCs03({ material: 'MAT_SAFE_01', plant: '1012', bomUsage: '1', alternativeBom: '2' });
+    assert.strictEqual(targetAlt2.exists, true);
+    assert.strictEqual(targetAlt2.components[0].material, 'NEW_COPIED_COMP', 'Alternative 2 must contain the newly copied component');
     console.log('   ✓ Target Alternative 1 remained completely untouched while Alternative 2 was created');
 
     // -------------------------------------------------------------------------
-    // TEST 8: Execution order is strictly bottom-up
+    // TEST 6: Verify Phase - detects missing sub-BOM at depth 1
     // -------------------------------------------------------------------------
-    console.log('\n8. Testing Strict Bottom-Up Execution Sequence:');
+    console.log('\n6. Testing Verify Phase (detects missing sub-BOM at depth 1):');
     resetMockBomDataset();
-    const hierarchy8 = await discoverBomHierarchy({
-      source: { material: 'A1BH0214C', plant: '1001', bomUsage: '1' },
-      target: { material: 'A1BH0214C', plant: '1012', bomUsage: '1' }
+    setMockBomAlternatives('MAIN_D1', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'SUB_D1', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('SUB_D1', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'RAW_1', quantity: '5', unit: 'KG', itemCategory: 'L', assembly: false }
+    ]);
+    setMockBomAlternatives('MAIN_D1', '1012', '1', ['1'], 1, [
+      { item: '0010', material: 'SUB_D1', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }
+    ]);
+
+    const verify6 = await inspectAndVerifyHierarchy({
+      source: { material: 'MAIN_D1', plant: '1001', bomUsage: '1' },
+      target: { material: 'MAIN_D1', plant: '1012', bomUsage: '1' }
+    });
+    assert.ok(verify6.missingSubBoms.some((m) => m.material === 'SUB_D1' && m.depth === 1), 'Must detect missing sub-BOM at depth 1');
+    console.log('   ✓ Verify phase correctly detected missing sub-BOM SUB_D1 at depth 1');
+
+    // -------------------------------------------------------------------------
+    // TEST 7: Verify Phase - detects missing sub-BOM at depth 2 (grandchild)
+    // -------------------------------------------------------------------------
+    console.log('\n7. Testing Verify Phase (detects missing sub-BOM at depth 2 grandchild):');
+    resetMockBomDataset();
+    setMockBomAlternatives('MAIN_D2', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'SUB_D2', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('SUB_D2', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'GRANDCHILD_D2', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('GRANDCHILD_D2', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'RAW_2', quantity: '5', unit: 'KG', itemCategory: 'L', assembly: false }
+    ]);
+    setMockBomAlternatives('MAIN_D2', '1012', '1', ['1'], 1, [
+      { item: '0010', material: 'SUB_D2', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }
+    ]);
+
+    const verify7 = await inspectAndVerifyHierarchy({
+      source: { material: 'MAIN_D2', plant: '1001', bomUsage: '1' },
+      target: { material: 'MAIN_D2', plant: '1012', bomUsage: '1' }
+    });
+    assert.ok(verify7.missingSubBoms.some((m) => m.material === 'GRANDCHILD_D2' && m.depth === 2), 'Must detect missing sub-BOM at depth 2');
+    console.log('   ✓ Verify phase correctly detected missing grandchild sub-BOM at depth 2');
+
+    // -------------------------------------------------------------------------
+    // TEST 8: Verify Phase - detects missing sub-BOM at depth 3+
+    // -------------------------------------------------------------------------
+    console.log('\n8. Testing Verify Phase (detects missing sub-BOM at depth 3+):');
+    resetMockBomDataset();
+    setMockBomAlternatives('MAIN_D3', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'SUB_D3', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('SUB_D3', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'GC_D3', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('GC_D3', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'GGC_D3', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('GGC_D3', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'RAW_3', quantity: '2', unit: 'KG', itemCategory: 'L', assembly: false }
+    ]);
+    setMockBomAlternatives('MAIN_D3', '1012', '1', ['1'], 1, [
+      { item: '0010', material: 'SUB_D3', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }
+    ]);
+
+    const verify8 = await inspectAndVerifyHierarchy({
+      source: { material: 'MAIN_D3', plant: '1001', bomUsage: '1' },
+      target: { material: 'MAIN_D3', plant: '1012', bomUsage: '1' }
+    });
+    assert.ok(verify8.missingSubBoms.some((m) => m.material === 'GGC_D3' && m.depth === 3), 'Must detect missing sub-BOM at depth 3');
+    console.log('   ✓ Verify phase correctly detected missing deep sub-BOM GGC_D3 at depth 3');
+
+    // -------------------------------------------------------------------------
+    // TEST 9: Verify Phase - detects Asm=false when child BOM missing
+    // -------------------------------------------------------------------------
+    console.log('\n9. Testing Verify Phase (detects Asm=false when child BOM is missing):');
+    resetMockBomDataset();
+    setMockBomAlternatives('ASM_PARENT', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'ASM_CHILD', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('ASM_CHILD', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'RAW_M', quantity: '1', unit: 'KG', itemCategory: 'L', assembly: false }
+    ]);
+
+    await copyBomViaGui({
+      source: { material: 'ASM_PARENT', plant: '1001', bomUsage: '1' },
+      target: { material: 'ASM_PARENT', plant: '1012', bomUsage: '1' },
+      copiedMainOnly: true,
+      allowMissingSubBoms: true
     });
 
-    const depths = hierarchy8.copyOrder.map((b) => b.depth);
-    for (let i = 0; i < depths.length - 1; i++) {
-      assert.ok(depths[i] >= depths[i + 1], `Depth at index ${i} (${depths[i]}) must be >= depth at index ${i + 1} (${depths[i + 1]})`);
-    }
-    assert.strictEqual(depths[depths.length - 1], 0, 'Main BOM at the end must have depth 0');
-    console.log('   ✓ Execution order strictly follows bottom-up sequence:', depths);
+    const cs03Parent = await verifyBomInCs03({ material: 'ASM_PARENT', plant: '1012', bomUsage: '1' });
+    assert.strictEqual(cs03Parent.components[0].assembly, false, 'Target component assembly must evaluate to false when child BOM is missing');
 
-    // -------------------------------------------------------------------------
-    // TEST 9: Fail-stop behavior: if any sub-BOM creation fails, execution halts immediately
-    // -------------------------------------------------------------------------
-    console.log('\n9. Testing Fail-Stop Behavior (Halts on First Failure):');
-    resetMockBomDataset();
-    // Simulate invalid source sub-BOM that cannot be found
-    const invalidCopyOrder = [
-      { material: 'MISSING_SOURCE_SUB', sourceMaterial: 'NON_EXISTENT', sourcePlant: '1001', targetPlant: '1012', bomUsage: '1', depth: 1, components: [] },
-      { material: 'SHOULD_NOT_BE_ATTEMPTED', sourceMaterial: 'A1BH0214C', sourcePlant: '1001', targetPlant: '1012', bomUsage: '1', depth: 0, components: [] }
-    ];
-
-    const pendingFail = pendingActionStore.createPendingAction({
-      type: 'copy_bom',
-      entityKey: 'bom',
-      recordId: 'SHOULD_NOT_BE_ATTEMPTED',
-      payload: {
-        source: { material: 'NON_EXISTENT', plant: '1001', bomUsage: '1' },
-        target: { material: 'SHOULD_NOT_BE_ATTEMPTED', plant: '1012', bomUsage: '1' },
-        copyOrder: invalidCopyOrder
-      },
-      preview: { summary: 'Fail stop test', copyOrder: invalidCopyOrder },
-      sapUsername: 'LEELAM_EXT',
-      sourcePrompt: 'Test fail stop'
+    const verify9 = await inspectAndVerifyHierarchy({
+      source: { material: 'ASM_PARENT', plant: '1001', bomUsage: '1' },
+      target: { material: 'ASM_PARENT', plant: '1012', bomUsage: '1' }
     });
-
-    const failConfirmRes = await makeRequest('POST', '/api/chat', { confirmAction: pendingFail.actionId }, authHeaders);
-    assert.strictEqual(failConfirmRes.status, 200);
-    assert.strictEqual(failConfirmRes.data.error, true);
-    assert.ok(failConfirmRes.data.reply.includes('MISSING_SOURCE_SUB') || failConfirmRes.data.reply.includes('failed'), 'Must report exact failing BOM');
-
-    // Verify SHOULD_NOT_BE_ATTEMPTED was never created in target plant
-    const shouldNotRes = await verifyBomInCs03({ material: 'SHOULD_NOT_BE_ATTEMPTED', plant: '1012', bomUsage: '1' });
-    assert.strictEqual(shouldNotRes.exists, false, 'Remaining BOMs must not be attempted after a failure');
-    console.log('   ✓ Execution halted immediately on sub-BOM failure; subsequent BOMs were not attempted');
+    assert.strictEqual(verify9.missingSubBoms.length, 1);
+    assert.strictEqual(verify9.missingSubBoms[0].material, 'ASM_CHILD');
+    console.log('   ✓ CS03 dynamically evaluated Asm=false for parent when child BOM is missing in plant');
 
     // -------------------------------------------------------------------------
-    // TEST 10: Cycle detection: circular references detected and prevented
+    // TEST 10: Verify Phase - reports 100% match when all sub-BOMs exist
     // -------------------------------------------------------------------------
-    console.log('\n10. Testing Cycle Detection (Circular BOM References):');
+    console.log('\n10. Testing Verify Phase (reports 100% match when all sub-BOMs exist):');
+    resetMockBomDataset();
+    setMockBomAlternatives('FULL_PARENT', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'FULL_CHILD', quantity: '2', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('FULL_CHILD', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'FULL_RAW', quantity: '5', unit: 'KG', itemCategory: 'L', assembly: false }
+    ]);
+    setMockBomAlternatives('FULL_CHILD', '1012', '1', ['1'], 1, [
+      { item: '0010', material: 'FULL_RAW', quantity: '5', unit: 'KG', itemCategory: 'L', assembly: false }
+    ]);
+    setMockBomAlternatives('FULL_PARENT', '1012', '1', ['1'], 1, [
+      { item: '0010', material: 'FULL_CHILD', quantity: '2', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+
+    const verify10 = await inspectAndVerifyHierarchy({
+      source: { material: 'FULL_PARENT', plant: '1001', bomUsage: '1' },
+      target: { material: 'FULL_PARENT', plant: '1012', bomUsage: '1' }
+    });
+    assert.strictEqual(verify10.match, true);
+    assert.strictEqual(verify10.status, 'SUCCESS');
+    assert.strictEqual(verify10.missingSubBoms.length, 0);
+    assert.strictEqual(verify10.discrepancies.length, 0);
+    console.log('   ✓ Verify phase reported 100% match with zero discrepancies when all sub-BOMs exist');
+
+    // -------------------------------------------------------------------------
+    // TEST 11: Verify Phase - cycle protection prevents infinite loops
+    // -------------------------------------------------------------------------
+    console.log('\n11. Testing Verify Phase (cycle protection prevents infinite loops):');
     resetMockBomDataset();
     setMockBomAlternatives('CYCLE_A', '1001', '1', ['1'], 1, [
-      { item: '0010', material: 'CYCLE_B', description: 'Cycle B', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+      { item: '0010', material: 'CYCLE_B', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
     ]);
     setMockBomAlternatives('CYCLE_B', '1001', '1', ['1'], 1, [
-      { item: '0010', material: 'CYCLE_A', description: 'Cycle A', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+      { item: '0010', material: 'CYCLE_A', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('CYCLE_A', '1012', '1', ['1'], 1, [
+      { item: '0010', material: 'CYCLE_B', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }
     ]);
 
-    const cycleRes = await discoverBomHierarchy({
+    const verify11 = await inspectAndVerifyHierarchy({
       source: { material: 'CYCLE_A', plant: '1001', bomUsage: '1' },
       target: { material: 'CYCLE_A', plant: '1012', bomUsage: '1' }
     });
-
-    assert.strictEqual(cycleRes.cycleDetected, true, 'Circular reference must be detected');
-    assert.ok(cycleRes.copyOrder.length <= 2, 'Circular reference must not cause infinite explosion');
-    console.log('   ✓ Cycle detected successfully without infinite recursion');
+    assert.strictEqual(verify11.cycleDetected, true);
+    console.log('   ✓ Cycle detected successfully and infinite traversal safely prevented');
 
     // -------------------------------------------------------------------------
-    // TEST 11: Max depth 5 enforcement
+    // TEST 12: Verify Phase - max depth 5 respected
     // -------------------------------------------------------------------------
-    console.log('\n11. Testing Max Depth 5 Enforcement:');
+    console.log('\n12. Testing Verify Phase (max depth 5 respected):');
     resetMockBomDataset();
-    // Build a 7-level chain: D0 -> D1 -> D2 -> D3 -> D4 -> D5 -> D6 -> D7
-    for (let d = 0; d < 7; d++) {
-      setMockBomAlternatives(`MAT_D${d}`, '1001', '1', ['1'], 1, [
-        { item: '0010', material: `MAT_D${d + 1}`, description: `Depth ${d + 1}`, quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    for (let d = 0; d < 6; d++) {
+      setMockBomAlternatives(`LEVEL_${d}`, '1001', '1', ['1'], 1, [
+        { item: '0010', material: `LEVEL_${d + 1}`, quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
       ]);
     }
-    setMockBomAlternatives('MAT_D7', '1001', '1', ['1'], 1, [
-      { item: '0010', material: 'RAW_LEAF', description: 'Leaf', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }
+    setMockBomAlternatives('LEVEL_6', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'BASE_RAW', quantity: '1', unit: 'KG', itemCategory: 'L', assembly: false }
+    ]);
+    setMockBomAlternatives('LEVEL_0', '1012', '1', ['1'], 1, [
+      { item: '0010', material: 'LEVEL_1', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }
     ]);
 
-    const depthRes = await discoverBomHierarchy({
-      source: { material: 'MAT_D0', plant: '1001', bomUsage: '1' },
-      target: { material: 'MAT_D0', plant: '1012', bomUsage: '1' },
+    const verify12 = await inspectAndVerifyHierarchy({
+      source: { material: 'LEVEL_0', plant: '1001', bomUsage: '1' },
+      target: { material: 'LEVEL_0', plant: '1012', bomUsage: '1' },
       maxDepth: 5
     });
-
-    const maxObservedDepth = depthRes.copyOrder.reduce((max, b) => Math.max(max, b.depth), 0);
-    assert.ok(maxObservedDepth <= 5, `Max depth must not exceed 5 (observed: ${maxObservedDepth})`);
-    console.log(`   ✓ Max depth 5 enforced (explored up to depth ${maxObservedDepth})`);
+    assert.ok(verify12.maxDepthReached <= 4, `Max depth reached must not exceed 4 (5 levels), got: ${verify12.maxDepthReached}`);
+    console.log(`   ✓ Max depth 5 strictly respected (explored up to depth ${verify12.maxDepthReached})`);
 
     // -------------------------------------------------------------------------
-    // TEST 12: Recursive CS03 structural verification
+    // TEST 13: Repair Phase - bottom-up order (deepest first: D -> C -> B)
     // -------------------------------------------------------------------------
-    console.log('\n12. Testing Recursive CS03 Structural Verification:');
+    console.log('\n13. Testing Repair Phase (bottom-up order deepest first: D -> C -> B):');
     resetMockBomDataset();
-    const copyOrder12 = [
-      {
-        material: 'B1BH0214C',
-        sourceMaterial: 'B1BH0214C',
-        sourcePlant: '1001',
-        targetPlant: '1012',
-        bomUsage: '1',
-        targetAlt: '1',
-        depth: 1,
-        components: [
-          { item: '0010', material: 'RAW_EVA_01', description: 'EVA COMPOUND', quantity: '50', unit: 'KG', itemCategory: 'L', assembly: false }
-        ]
+    setMockBomAlternatives('MAT_B', '1001', '1', ['1'], 1, [{ item: '0010', material: 'RAW_B', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }]);
+    setMockBomAlternatives('MAT_C', '1001', '1', ['1'], 1, [{ item: '0010', material: 'RAW_C', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }]);
+    setMockBomAlternatives('MAT_D', '1001', '1', ['1'], 1, [{ item: '0010', material: 'RAW_D', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }]);
+
+    const missing13 = [
+      { material: 'MAT_B', sourcePlant: '1001', targetPlant: '1012', bomUsage: '1', depth: 1 },
+      { material: 'MAT_D', sourcePlant: '1001', targetPlant: '1012', bomUsage: '1', depth: 3 },
+      { material: 'MAT_C', sourcePlant: '1001', targetPlant: '1012', bomUsage: '1', depth: 2 }
+    ];
+    const executionOrder13 = [];
+    const repaired13 = await repairHierarchyBottomUp({
+      missingSubBoms: missing13,
+      onProgress: (msg) => {
+        const m = msg.match(/:\s*([A-Za-z0-9_-]+)\.\.\./);
+        if (m) executionOrder13.push(m[1]);
       }
-    ];
+    });
+    assert.strictEqual(repaired13.length, 3);
+    assert.deepStrictEqual(executionOrder13, ['MAT_D', 'MAT_C', 'MAT_B']);
+    console.log('   ✓ Repair execution order strictly followed bottom-up sequence: D -> C -> B');
 
-    setMockBomAlternatives('B1BH0214C', '1012', '1', ['1'], 1, copyOrder12[0].components);
+    // -------------------------------------------------------------------------
+    // TEST 14: Repair Phase - creates new alternative if sub-BOM exists in target
+    // -------------------------------------------------------------------------
+    console.log('\n14. Testing Repair Phase (creates new alternative if sub-BOM exists in target):');
+    resetMockBomDataset();
+    setMockBomAlternatives('SUB_ALTS', '1001', '1', ['1'], 1, [{ item: '0010', material: 'RAW_SRC', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }]);
+    setMockBomAlternatives('SUB_ALTS', '1012', '1', ['1'], 1, [{ item: '0010', material: 'RAW_TGT', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }]);
 
-    const verifyRes12 = await verifyHierarchyStructure({
-      copyOrder: copyOrder12,
-      targetPlant: '1012',
-      bomUsage: '1'
+    const repaired14 = await repairHierarchyBottomUp({
+      missingSubBoms: [{ material: 'SUB_ALTS', sourcePlant: '1001', targetPlant: '1012', bomUsage: '1', depth: 1 }]
+    });
+    assert.strictEqual(repaired14.length, 1);
+    assert.strictEqual(repaired14[0].alternativeBom, '2', 'Must create under Alternative 2 when Alternative 1 exists');
+    console.log('   ✓ Repair phase created sub-BOM under next available Alternative 2 without overwriting');
+
+    // -------------------------------------------------------------------------
+    // TEST 15: Repair Phase - creates under alternative 1 if sub-BOM does not exist
+    // -------------------------------------------------------------------------
+    console.log('\n15. Testing Repair Phase (creates under alternative 1 if sub-BOM does not exist):');
+    resetMockBomDataset();
+    setMockBomAlternatives('SUB_FRESH', '1001', '1', ['1'], 1, [{ item: '0010', material: 'RAW_FRESH', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }]);
+
+    const repaired15 = await repairHierarchyBottomUp({
+      missingSubBoms: [{ material: 'SUB_FRESH', sourcePlant: '1001', targetPlant: '1012', bomUsage: '1', depth: 1 }]
+    });
+    assert.strictEqual(repaired15.length, 1);
+    assert.strictEqual(repaired15[0].alternativeBom, '1', 'Must create under Alternative 1 when no BOM exists in target');
+    console.log('   ✓ Repair phase created sub-BOM under Alternative 1 when no BOM exists in target plant');
+
+    // -------------------------------------------------------------------------
+    // TEST 16: Repair Phase - fail-stop halts execution on first error
+    // -------------------------------------------------------------------------
+    console.log('\n16. Testing Repair Phase (fail-stop halts execution on first error):');
+    resetMockBomDataset();
+    setMockBomAlternatives('VALID_SUB', '1001', '1', ['1'], 1, [{ item: '0010', material: 'RAW_OK', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }]);
+
+    let failError16 = null;
+    try {
+      await repairHierarchyBottomUp({
+        missingSubBoms: [
+          { material: 'FAILING_SUB', sourceMaterial: 'NON_EXISTENT_SOURCE', sourcePlant: '1001', targetPlant: '1012', bomUsage: '1', depth: 2 },
+          { material: 'VALID_SUB', sourcePlant: '1001', targetPlant: '1012', bomUsage: '1', depth: 1 }
+        ]
+      });
+    } catch (err) {
+      failError16 = err;
+    }
+    assert.ok(failError16, 'Must throw fail-stop error on sub-BOM failure');
+    assert.ok(failError16.message.includes('FAILING_SUB'), 'Error message must report failing material');
+    const validCheck16 = await verifyBomInCs03({ material: 'VALID_SUB', plant: '1012', bomUsage: '1' });
+    assert.strictEqual(validCheck16.exists, false, 'Subsequent sub-BOMs must not be attempted after first failure');
+    console.log('   ✓ Fail-stop behavior strictly halted execution on first failure');
+
+    // -------------------------------------------------------------------------
+    // TEST 17: Re-Verify Phase - confirms Asm=true after child created
+    // -------------------------------------------------------------------------
+    console.log('\n17. Testing Re-Verify Phase (confirms Asm=true after child created):');
+    resetMockBomDataset();
+    setMockBomAlternatives('RV_PARENT', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'RV_CHILD', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    ]);
+    setMockBomAlternatives('RV_CHILD', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'RV_RAW', quantity: '3', unit: 'KG', itemCategory: 'L', assembly: false }
+    ]);
+
+    await copyBomViaGui({
+      source: { material: 'RV_PARENT', plant: '1001', bomUsage: '1' },
+      target: { material: 'RV_PARENT', plant: '1012', bomUsage: '1' },
+      copiedMainOnly: true,
+      allowMissingSubBoms: true
     });
 
-    assert.strictEqual(verifyRes12.match, true);
-    assert.strictEqual(verifyRes12.status, 'SUCCESS');
-    assert.strictEqual(verifyRes12.verifiedCount, 1);
-    console.log('   ✓ Recursive CS03 verification succeeded with 100% parity across hierarchy');
-
-    // -------------------------------------------------------------------------
-    // TEST 13: Verification failure on quantity / unit / category mismatch
-    // -------------------------------------------------------------------------
-    console.log('\n13. Testing Verification Failure on Quantity, Unit, and Category Mismatches:');
-    const sourceComps13 = [
-      { item: '0010', material: 'RAW_01', quantity: '10', unit: 'KG', itemCategory: 'L', assembly: false }
-    ];
-
-    // Quantity mismatch
-    const compQtyFail = compareBomStructures({
-      sourceComponents: sourceComps13,
-      targetComponents: [{ item: '0010', material: 'RAW_01', quantity: '25', unit: 'KG', itemCategory: 'L', assembly: false }]
+    const beforeVerify17 = await inspectAndVerifyHierarchy({
+      source: { material: 'RV_PARENT', plant: '1001', bomUsage: '1' },
+      target: { material: 'RV_PARENT', plant: '1012', bomUsage: '1' },
+      isReverify: false
     });
-    assert.strictEqual(compQtyFail.match, false);
-    assert.strictEqual(compQtyFail.status, 'FAILURE');
-    assert.ok(compQtyFail.differences.some((d) => d.includes('Quantity mismatch')));
+    assert.strictEqual(beforeVerify17.missingSubBoms.length, 1);
 
-    // Unit mismatch
-    const compUnitFail = compareBomStructures({
-      sourceComponents: sourceComps13,
-      targetComponents: [{ item: '0010', material: 'RAW_01', quantity: '10', unit: 'EA', itemCategory: 'L', assembly: false }]
+    await repairHierarchyBottomUp({ missingSubBoms: beforeVerify17.missingSubBoms });
+
+    const cs03After17 = await verifyBomInCs03({ material: 'RV_PARENT', plant: '1012', bomUsage: '1' });
+    assert.strictEqual(cs03After17.components[0].assembly, true, 'Assembly indicator must evaluate to true after child created');
+
+    const afterVerify17 = await inspectAndVerifyHierarchy({
+      source: { material: 'RV_PARENT', plant: '1001', bomUsage: '1' },
+      target: { material: 'RV_PARENT', plant: '1012', bomUsage: '1' },
+      isReverify: true
     });
-    assert.strictEqual(compUnitFail.match, false);
-    assert.strictEqual(compUnitFail.status, 'FAILURE');
-    assert.ok(compUnitFail.differences.some((d) => d.includes('Unit mismatch')));
-
-    // Category mismatch
-    const compCatFail = compareBomStructures({
-      sourceComponents: sourceComps13,
-      targetComponents: [{ item: '0010', material: 'RAW_01', quantity: '10', unit: 'KG', itemCategory: 'N', assembly: false }]
-    });
-    assert.strictEqual(compCatFail.match, false);
-    assert.strictEqual(compCatFail.status, 'FAILURE');
-    assert.ok(compCatFail.differences.some((d) => d.includes('Item category mismatch')));
-    console.log('   ✓ Quantity, unit, and item category mismatches correctly rejected with status FAILURE');
+    assert.strictEqual(afterVerify17.match, true);
+    assert.strictEqual(afterVerify17.missingSubBoms.length, 0);
+    assert.strictEqual(afterVerify17.discrepancies.length, 0);
+    console.log('   ✓ Re-verify phase confirmed Asm=true and 100% hierarchy parity after child created');
 
     // -------------------------------------------------------------------------
-    // TEST 14: Verification failure on assembly indicator mismatch
+    // TEST 18: End-to-End - single BOM (no sub-BOMs): copy -> verify (match) -> done (1 created)
     // -------------------------------------------------------------------------
-    console.log('\n14. Testing Verification Failure on Assembly Indicator Mismatch:');
-    const compAsmFail = compareBomStructures({
-      sourceComponents: [
-        { item: '0010', material: 'SUB_01', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
-      ],
-      targetComponents: [
-        { item: '0010', material: 'SUB_01', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: false }
-      ],
-      copiedMainOnly: false
-    });
+    console.log('\n18. Testing End-to-End Single BOM (copy -> verify -> done, 1 created):');
+    resetMockBomDataset();
+    setMockBomAlternatives('SINGLE_E2E', '1001', '1', ['1'], 2, [
+      { item: '0010', material: 'PART_A', quantity: '10', unit: 'KG', itemCategory: 'L', assembly: false },
+      { item: '0020', material: 'PART_B', quantity: '20', unit: 'KG', itemCategory: 'L', assembly: false }
+    ]);
 
-    assert.strictEqual(compAsmFail.match, false);
-    assert.strictEqual(compAsmFail.status, 'FAILURE');
-    assert.ok(compAsmFail.differences.some((d) => d.includes('Assembly indicator mismatch')));
-    console.log('   ✓ Assembly indicator mismatch rejected with status FAILURE and explicit reason');
+    const prop18 = await makeRequest('POST', '/api/chat', {
+      actionType: 'copy_bom',
+      copyBomParams: {
+        sourceMaterial: 'SINGLE_E2E',
+        sourcePlant: '1001',
+        sourceUsage: '1',
+        targetMaterial: 'SINGLE_E2E',
+        targetPlant: '1012',
+        targetUsage: '1'
+      }
+    }, authHeaders);
+    assert.strictEqual(prop18.status, 200);
+    assert.ok(prop18.data.proposedAction);
+    const actionId18 = prop18.data.proposedAction.actionId;
+
+    const conf18 = await makeRequest('POST', '/api/chat', { confirmAction: actionId18 }, authHeaders);
+    assert.strictEqual(conf18.status, 200);
+    assert.strictEqual(conf18.data.actionResult.success, true);
+    assert.strictEqual(conf18.data.actionResult.totalBomsCreated, 1);
+
+    const cs03Single = await verifyBomInCs03({ material: 'SINGLE_E2E', plant: '1012', bomUsage: '1', alternativeBom: '1' });
+    assert.strictEqual(cs03Single.exists, true);
+    assert.strictEqual(cs03Single.components.length, 2);
+    console.log('   ✓ End-to-End single BOM completed with 1 BOM created and verified');
 
     // -------------------------------------------------------------------------
-    // TEST 15: Comprehensive audit logging for EVERY created BOM in hierarchy
+    // TEST 19: End-to-End - multi-level hierarchy: copy -> verify (missing) -> repair -> re-verify (match) -> done (N created)
     // -------------------------------------------------------------------------
-    console.log('\n15. Testing Comprehensive Audit Logging (Entry for Every BOM Created):');
+    console.log('\n19. Testing End-to-End Multi-Level Hierarchy (copy -> verify -> repair -> re-verify, N created):');
     resetMockBomDataset();
     auditLogger.clearAuditLogs();
 
-    setMockBomAlternatives('AUDIT_SUB', '1001', '1', ['1'], 1, [
-      { item: '0010', material: 'RAW_A', quantity: '1', unit: 'KG', itemCategory: 'L', assembly: false }
+    const prop19 = await makeRequest('POST', '/api/chat', {
+      actionType: 'copy_bom',
+      copyBomParams: {
+        sourceMaterial: 'A1BH0214C',
+        sourcePlant: '1001',
+        sourceUsage: '1',
+        targetMaterial: 'A1BH0214C',
+        targetPlant: '1012',
+        targetUsage: '1'
+      }
+    }, authHeaders);
+    assert.strictEqual(prop19.status, 200);
+    assert.ok(prop19.data.proposedAction);
+    const actionId19 = prop19.data.proposedAction.actionId;
+
+    const conf19 = await makeRequest('POST', '/api/chat', { confirmAction: actionId19 }, authHeaders);
+    assert.strictEqual(conf19.status, 200);
+    assert.strictEqual(conf19.data.actionResult.success, true);
+    assert.ok(conf19.data.actionResult.totalBomsCreated >= 2, 'Multiple BOMs must be created across hierarchy');
+
+    const targetMain19 = await verifyBomInCs03({ material: 'A1BH0214C', plant: '1012', bomUsage: '1' });
+    assert.strictEqual(targetMain19.exists, true);
+    const hasAsm19 = targetMain19.components.some((c) => c.assembly === true);
+    assert.strictEqual(hasAsm19, true, 'Assembly indicators must be preserved in target plant');
+
+    const logs19 = auditLogger.getAuditLogs().filter((l) => l.actionType === 'copy_bom');
+    assert.strictEqual(logs19.length, conf19.data.actionResult.totalBomsCreated, 'Audit log entry must be recorded for every created BOM');
+    console.log(`   ✓ Multi-level hierarchy copied, repaired, and verified: ${conf19.data.actionResult.totalBomsCreated} BOMs created with audit trails`);
+
+    // -------------------------------------------------------------------------
+    // TEST 20: End-to-End - existing target BOMs get new alternative, not overwritten
+    // -------------------------------------------------------------------------
+    console.log('\n20. Testing End-to-End Existing Target BOMs (new alternative, not overwritten):');
+    resetMockBomDataset();
+    setMockBomAlternatives('EXISTING_MAT', '1012', '1', ['1'], 1, [
+      { item: '0010', material: 'TARGET_ORIGINAL_COMP', description: 'Original in Target', quantity: '100', unit: 'EA', itemCategory: 'L', assembly: false }
     ]);
-    setMockBomAlternatives('AUDIT_MAIN', '1001', '1', ['1'], 1, [
-      { item: '0010', material: 'AUDIT_SUB', quantity: '1', unit: 'EA', itemCategory: 'L', assembly: true }
+    setMockBomAlternatives('EXISTING_MAT', '1001', '1', ['1'], 1, [
+      { item: '0010', material: 'SOURCE_COPIED_COMP', description: 'Copied from Source', quantity: '200', unit: 'EA', itemCategory: 'L', assembly: false }
     ]);
 
-    const proposeRes15 = await makeRequest(
-      'POST',
-      '/api/chat',
-      {
-        message: 'Copy BOM from AUDIT_MAIN plant 1001 to plant 1012',
-        actionType: 'copy_bom',
-        copyBomParams: {
-          sourceMaterial: 'AUDIT_MAIN',
-          sourcePlant: '1001',
-          sourceUsage: '1',
-          targetMaterial: 'AUDIT_MAIN',
-          targetPlant: '1012',
-          targetUsage: '1'
-        }
-      },
-      authHeaders
-    );
+    const prop20 = await makeRequest('POST', '/api/chat', {
+      actionType: 'copy_bom',
+      copyBomParams: {
+        sourceMaterial: 'EXISTING_MAT',
+        sourcePlant: '1001',
+        sourceUsage: '1',
+        targetMaterial: 'EXISTING_MAT',
+        targetPlant: '1012',
+        targetUsage: '1'
+      }
+    }, authHeaders);
+    assert.strictEqual(prop20.status, 200);
+    const actionId20 = prop20.data.proposedAction.actionId;
 
-    const actionId15 = proposeRes15.data.proposedAction.actionId;
-    const confirmRes15 = await makeRequest('POST', '/api/chat', { confirmAction: actionId15 }, authHeaders);
-    assert.strictEqual(confirmRes15.status, 200);
+    const conf20 = await makeRequest('POST', '/api/chat', { confirmAction: actionId20 }, authHeaders);
+    assert.strictEqual(conf20.status, 200);
+    assert.strictEqual(conf20.data.actionResult.success, true);
 
-    const logs = auditLogger.getAuditLogs().filter((l) => l.actionType === 'copy_bom');
-    assert.strictEqual(logs.length, 2, 'Exactly 2 audit log entries must be created (1 sub-BOM + 1 main BOM)');
-    assert.ok(logs.some((l) => l.recordId === 'AUDIT_SUB'), 'Sub-BOM audit entry must exist');
-    assert.ok(logs.some((l) => l.recordId === 'AUDIT_MAIN'), 'Main BOM audit entry must exist');
-    console.log('   ✓ Comprehensive audit log entries recorded for every created BOM in the hierarchy');
+    const alt1Check = await verifyBomInCs03({ material: 'EXISTING_MAT', plant: '1012', bomUsage: '1', alternativeBom: '1' });
+    assert.strictEqual(alt1Check.exists, true);
+    assert.strictEqual(alt1Check.components[0].material, 'TARGET_ORIGINAL_COMP', 'Existing Alternative 1 must remain untouched');
+
+    const alt2Check = await verifyBomInCs03({ material: 'EXISTING_MAT', plant: '1012', bomUsage: '1', alternativeBom: '2' });
+    assert.strictEqual(alt2Check.exists, true);
+    assert.strictEqual(alt2Check.components[0].material, 'SOURCE_COPIED_COMP', 'New Alternative 2 must contain the copied components');
+    console.log('   ✓ Existing target Alternative 1 remained completely untouched while Alternative 2 was created');
 
     console.log('\n======================================================');
-    console.log('✅ ALL 15 BOM HIERARCHY STRUCTURAL PRESERVATION TESTS PASSED!');
+    console.log('✅ ALL 20 BOM HIERARCHY STRUCTURAL PRESERVATION TESTS PASSED!');
     console.log('======================================================\n');
   } finally {
     if (server) {

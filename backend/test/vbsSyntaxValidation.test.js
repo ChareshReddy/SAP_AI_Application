@@ -1,0 +1,204 @@
+import assert from 'assert';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { execFileSync } from 'child_process';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+import {
+  CS01_FIELD_IDS,
+  SAMPLE_A1BH0214C_COMPONENTS,
+  ZBOM_COPY_FIELD_IDS
+} from '../services/sapGuiClient.js';
+
+function validateVbsSyntax(vbsContent, testName) {
+  // Ensure Option Explicit is present and prepend WScript.Quit 0 right after it
+  // This forces cscript to compile the entire file for syntax errors without executing runtime COM commands
+  assert.ok(vbsContent.includes('Option Explicit'), `${testName} must start with Option Explicit`);
+  
+  const testScript = vbsContent.replace('Option Explicit', 'Option Explicit\r\nWScript.Quit 0\r\n');
+  const tempPath = path.join(os.tmpdir(), `vbs_syntax_test_${Date.now()}_${Math.random().toString(36).slice(2)}.vbs`);
+  
+  fs.writeFileSync(tempPath, testScript, 'utf-8');
+  
+  try {
+    execFileSync('cscript.exe', ['//Nologo', tempPath], {
+      encoding: 'utf-8',
+      timeout: 10000
+    });
+    console.log(`   ✓ [Syntax OK] ${testName} compiled successfully (0 errors)`);
+  } catch (err) {
+    const errorMsg = (err.stderr || err.stdout || err.message || '').trim();
+    console.error(`   ✗ [Syntax Error] ${testName} failed compilation:\n${errorMsg}`);
+    throw new Error(`VBScript compilation failed for ${testName}: ${errorMsg}`);
+  } finally {
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch (_) {}
+  }
+}
+
+async function runVbsSyntaxTests() {
+  console.log('\n======================================================');
+  console.log('--- Starting Generated VBScript Syntax Validation Suite ---');
+  console.log('======================================================');
+
+  const sapGuiClientPath = path.resolve(__dirname, '../services/sapGuiClient.js');
+  const code = fs.readFileSync(sapGuiClientPath, 'utf-8');
+
+  // 1. TEST DIRECT-CREATE VBSCRIPT (createBomViaGui) WITH 16 COMPONENTS FOR A1BH0214C ALT 2
+  console.log('\n1. Validating createBomViaGui VBScript (A1BH0214C Alt 2 with 16 components):');
+  const createStart = code.indexOf('export async function createBomViaGui');
+  const createVbsStart = code.indexOf('const vbsScript = `', createStart);
+  const createVbsEnd = code.indexOf('`;\n\n  try {', createVbsStart);
+  const createTemplate = code.substring(createVbsStart + 'const vbsScript = `'.length, createVbsEnd);
+
+  const componentStatements = [];
+  SAMPLE_A1BH0214C_COMPONENTS.forEach((item, idx) => {
+    componentStatements.push(`
+    ' Component Row ${idx + 1} (row index ${idx})
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${idx}]").text = "${item.itemCategory}"
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${idx}]").text = "${item.material}"
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${idx}]").text = "${item.quantity}"
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${idx}]").setFocus
+    WScript.Sleep 200
+    `);
+  });
+
+  const renderedCreateVbs = createTemplate
+    .replace(/\$\{getSessionDiscoveryVbs\(targetSessionPath, expectedUser\)\}/g, 'Set session = app.FindById("/app/con[0]/ses[0]")')
+    .replace(/\$\{CS01_FIELD_IDS\.OK_CODE\}/g, CS01_FIELD_IDS.OK_CODE)
+    .replace(/\$\{CS01_FIELD_IDS\.MATERIAL\}/g, CS01_FIELD_IDS.MATERIAL)
+    .replace(/\$\{CS01_FIELD_IDS\.PLANT\}/g, CS01_FIELD_IDS.PLANT)
+    .replace(/\$\{CS01_FIELD_IDS\.BOM_USAGE\}/g, CS01_FIELD_IDS.BOM_USAGE)
+    .replace(/\$\{CS01_FIELD_IDS\.ALT_BOM\}/g, CS01_FIELD_IDS.ALT_BOM)
+    .replace(/\$\{CS01_FIELD_IDS\.VALID_FROM\}/g, CS01_FIELD_IDS.VALID_FROM)
+    .replace(/\$\{CS01_FIELD_IDS\.SAVE_BUTTON\}/g, CS01_FIELD_IDS.SAVE_BUTTON)
+    .replace(/\$\{CS01_FIELD_IDS\.STATUS_BAR\}/g, CS01_FIELD_IDS.STATUS_BAR)
+    .replace(/\$\{CS01_FIELD_IDS\.TABLE_BASE\}/g, CS01_FIELD_IDS.TABLE_BASE)
+    .replace(/\$\{CS01_FIELD_IDS\.ITEM_CATEGORY_FIELD\}/g, CS01_FIELD_IDS.ITEM_CATEGORY_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.COMPONENT_FIELD\}/g, CS01_FIELD_IDS.COMPONENT_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.QUANTITY_FIELD\}/g, CS01_FIELD_IDS.QUANTITY_FIELD)
+    .replace(/\$\{componentStatements\.join\('\\n'\)\}/g, componentStatements.join('\n'))
+    .replace(/\$\{escapeVbsString\(material\)\}/g, 'A1BH0214C')
+    .replace(/\$\{escapeVbsString\(plant\)\}/g, '1012')
+    .replace(/\$\{escapeVbsString\(bomUsage\)\}/g, '1')
+    .replace(/\$\{escapeVbsString\(alternativeBom\)\}/g, '2')
+    .replace(/\$\{escapeVbsString\(validFrom\)\}/g, '28.09.2026')
+    .replace(/\$\{alternativeBom \? [^:]+ : ''\}/g, 'session.findById("wnd[0]/usr/txtRC29N-STLAL").text = "2"')
+    .replace(/\$\{validFrom \? [^:]+ : ''\}/g, 'session.findById("wnd[0]/usr/ctxtRC29N-DATUV").text = "28.09.2026"')
+    .replace(/\$\{createdAltBom \? [^:]+ : ''\}/g, '');
+
+  validateVbsSyntax(renderedCreateVbs, 'createBomViaGui (A1BH0214C Alt 2 with 16 components)');
+
+  // 2. TEST COPY BOM VBSCRIPT (copyBomViaGui)
+  console.log('\n2. Validating copyBomViaGui VBScript:');
+  const copyStart = code.indexOf('export async function copyBomViaGui');
+  const copyVbsStart = code.indexOf('const vbsScript = `', copyStart);
+  const copyVbsEnd = code.indexOf('`;\n\n  try {', copyVbsStart);
+  const copyTemplate = code.substring(copyVbsStart + 'const vbsScript = `'.length, copyVbsEnd);
+
+  const renderedCopyVbs = copyTemplate
+    .replace(/\$\{getSessionDiscoveryVbs\(targetSessionPath, expectedUser\)\}/g, 'Set session = app.FindById("/app/con[0]/ses[0]")')
+    .replace(/\$\{CS01_FIELD_IDS\.OK_CODE\}/g, CS01_FIELD_IDS.OK_CODE)
+    .replace(/\$\{CS01_FIELD_IDS\.MATERIAL\}/g, CS01_FIELD_IDS.MATERIAL)
+    .replace(/\$\{CS01_FIELD_IDS\.PLANT\}/g, CS01_FIELD_IDS.PLANT)
+    .replace(/\$\{CS01_FIELD_IDS\.BOM_USAGE\}/g, CS01_FIELD_IDS.BOM_USAGE)
+    .replace(/\$\{CS01_FIELD_IDS\.ALT_BOM\}/g, CS01_FIELD_IDS.ALT_BOM)
+    .replace(/\$\{CS01_FIELD_IDS\.VALID_FROM\}/g, CS01_FIELD_IDS.VALID_FROM)
+    .replace(/\$\{CS01_FIELD_IDS\.SAVE_BUTTON\}/g, CS01_FIELD_IDS.SAVE_BUTTON)
+    .replace(/\$\{CS01_FIELD_IDS\.STATUS_BAR\}/g, CS01_FIELD_IDS.STATUS_BAR)
+    .replace(/\$\{CS01_FIELD_IDS\.TABLE_BASE\}/g, CS01_FIELD_IDS.TABLE_BASE)
+    .replace(/\$\{CS01_FIELD_IDS\.ITEM_CATEGORY_FIELD\}/g, CS01_FIELD_IDS.ITEM_CATEGORY_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.COMPONENT_FIELD\}/g, CS01_FIELD_IDS.COMPONENT_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.QUANTITY_FIELD\}/g, CS01_FIELD_IDS.QUANTITY_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.COPY_BUTTON\}/g, CS01_FIELD_IDS.COPY_BUTTON)
+    .replace(/\$\{CS01_FIELD_IDS\.COPY_REF_MATERIAL\}/g, CS01_FIELD_IDS.COPY_REF_MATERIAL)
+    .replace(/\$\{CS01_FIELD_IDS\.COPY_REF_PLANT\}/g, CS01_FIELD_IDS.COPY_REF_PLANT)
+    .replace(/\$\{CS01_FIELD_IDS\.COPY_REF_BOM_USAGE\}/g, CS01_FIELD_IDS.COPY_REF_BOM_USAGE)
+    .replace(/\$\{CS01_FIELD_IDS\.COPY_REF_ALT_BOM\}/g, CS01_FIELD_IDS.COPY_REF_ALT_BOM)
+    .replace(/\$\{CS01_FIELD_IDS\.COPY_POPUP_CONFIRM\}/g, CS01_FIELD_IDS.COPY_POPUP_CONFIRM)
+    .replace(/\$\{sourceMaterial\}/g, 'A1BH0214C')
+    .replace(/\$\{sourcePlant\}/g, '1001')
+    .replace(/\$\{sourceBomUsage\}/g, '1')
+    .replace(/\$\{sourceAltBom\}/g, '2')
+    .replace(/\$\{targetMaterial\}/g, 'A1BH0214C')
+    .replace(/\$\{targetPlant\}/g, '1012')
+    .replace(/\$\{targetBomUsage\}/g, '1')
+    .replace(/\$\{targetAltBom\}/g, '2')
+    .replace(/\$\{targetValidFrom\}/g, '28.09.2026')
+    .replace(/\$\{targetAltBom \? [^:]+ : ''\}/g, 'session.findById("wnd[0]/usr/txtRC29N-STLAL").text = "2"')
+    .replace(/\$\{targetValidFrom \? [^:]+ : ''\}/g, 'session.findById("wnd[0]/usr/ctxtRC29N-DATUV").text = "28.09.2026"');
+
+  validateVbsSyntax(renderedCopyVbs, 'copyBomViaGui VBScript');
+
+  // 3. TEST CS03 VERIFICATION VBSCRIPT (verifyBomInCs03)
+  console.log('\n3. Validating verifyBomInCs03 VBScript:');
+  const verifyStart = code.indexOf('export async function verifyBomInCs03');
+  const verifyVbsStart = code.indexOf('const vbsScript = `', verifyStart);
+  const verifyVbsEnd = code.indexOf('`;\n\n  try {', verifyVbsStart);
+  const verifyTemplate = code.substring(verifyVbsStart + 'const vbsScript = `'.length, verifyVbsEnd);
+
+  const renderedVerifyVbs = verifyTemplate
+    .replace(/\$\{getSessionDiscoveryVbs\(targetSessionPath, expectedUser\)\}/g, 'Set session = app.FindById("/app/con[0]/ses[0]")')
+    .replace(/\$\{CS01_FIELD_IDS\.OK_CODE\}/g, CS01_FIELD_IDS.OK_CODE)
+    .replace(/\$\{CS01_FIELD_IDS\.MATERIAL\}/g, CS01_FIELD_IDS.MATERIAL)
+    .replace(/\$\{CS01_FIELD_IDS\.PLANT\}/g, CS01_FIELD_IDS.PLANT)
+    .replace(/\$\{CS01_FIELD_IDS\.BOM_USAGE\}/g, CS01_FIELD_IDS.BOM_USAGE)
+    .replace(/\$\{CS01_FIELD_IDS\.ALT_BOM\}/g, CS01_FIELD_IDS.ALT_BOM)
+    .replace(/\$\{CS01_FIELD_IDS\.STATUS_BAR\}/g, CS01_FIELD_IDS.STATUS_BAR)
+    .replace(/\$\{CS01_FIELD_IDS\.TABLE_BASE\}/g, CS01_FIELD_IDS.TABLE_BASE)
+    .replace(/\$\{CS01_FIELD_IDS\.ITEM_CATEGORY_FIELD\}/g, CS01_FIELD_IDS.ITEM_CATEGORY_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.COMPONENT_FIELD\}/g, CS01_FIELD_IDS.COMPONENT_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.QUANTITY_FIELD\}/g, CS01_FIELD_IDS.QUANTITY_FIELD)
+    .replace(/\$\{escapeVbsString\(material\)\}/g, 'A1BH0214C')
+    .replace(/\$\{escapeVbsString\(plant\)\}/g, '1012')
+    .replace(/\$\{escapeVbsString\(bomUsage\)\}/g, '1')
+    .replace(/\$\{escapeVbsString\(alternativeBom\)\}/g, '2')
+    .replace(/\$\{alternativeBom \? [^:]+ : ''\}/g, 'session.findById("wnd[0]/usr/txtRC29N-STLAL").text = "2"');
+
+  validateVbsSyntax(renderedVerifyVbs, 'verifyBomInCs03 VBScript');
+
+  // 4. TEST DELETE BOM VBSCRIPT (deleteBomViaGui)
+  console.log('\n4. Validating deleteBomViaGui VBScript (ZBOM_COPY):');
+  const deleteStart = code.indexOf('export async function deleteBomViaGui');
+  const deleteVbsStart = code.indexOf('const vbsScript = `', deleteStart);
+  const deleteVbsEnd = code.indexOf('`;\n\n  try {', deleteVbsStart);
+  const deleteTemplate = code.substring(deleteVbsStart + 'const vbsScript = `'.length, deleteVbsEnd);
+
+  const renderedDeleteVbs = deleteTemplate
+    .replace(/\$\{getSessionDiscoveryVbs\(targetSessionPath, expectedUser\)\}/g, 'Set session = app.FindById("/app/con[0]/ses[0]")')
+    .replace(/\$\{ZBOM_COPY_FIELD_IDS\.OK_CODE\}/g, ZBOM_COPY_FIELD_IDS.OK_CODE)
+    .replace(/\$\{ZBOM_COPY_FIELD_IDS\.RADIO_DELETE\}/g, ZBOM_COPY_FIELD_IDS.RADIO_DELETE)
+    .replace(/\$\{ZBOM_COPY_FIELD_IDS\.MATERIAL\}/g, ZBOM_COPY_FIELD_IDS.MATERIAL)
+    .replace(/\$\{ZBOM_COPY_FIELD_IDS\.PLANT\}/g, ZBOM_COPY_FIELD_IDS.PLANT)
+    .replace(/\$\{ZBOM_COPY_FIELD_IDS\.ALT_BOM\}/g, ZBOM_COPY_FIELD_IDS.ALT_BOM)
+    .replace(/\$\{ZBOM_COPY_FIELD_IDS\.BOM_USAGE\}/g, ZBOM_COPY_FIELD_IDS.BOM_USAGE)
+    .replace(/\$\{ZBOM_COPY_FIELD_IDS\.EXECUTE_BUTTON\}/g, ZBOM_COPY_FIELD_IDS.EXECUTE_BUTTON)
+    .replace(/\$\{ZBOM_COPY_FIELD_IDS\.POPUP_CONFIRM\}/g, ZBOM_COPY_FIELD_IDS.POPUP_CONFIRM)
+    .replace(/\$\{ZBOM_COPY_FIELD_IDS\.STATUS_BAR\}/g, ZBOM_COPY_FIELD_IDS.STATUS_BAR)
+    .replace(/\$\{CS01_FIELD_IDS\.OK_CODE\}/g, CS01_FIELD_IDS.OK_CODE)
+    .replace(/\$\{CS01_FIELD_IDS\.MATERIAL\}/g, CS01_FIELD_IDS.MATERIAL)
+    .replace(/\$\{CS01_FIELD_IDS\.PLANT\}/g, CS01_FIELD_IDS.PLANT)
+    .replace(/\$\{CS01_FIELD_IDS\.BOM_USAGE\}/g, CS01_FIELD_IDS.BOM_USAGE)
+    .replace(/\$\{CS01_FIELD_IDS\.ALT_BOM\}/g, CS01_FIELD_IDS.ALT_BOM)
+    .replace(/\$\{CS01_FIELD_IDS\.STATUS_BAR\}/g, CS01_FIELD_IDS.STATUS_BAR)
+    .replace(/\$\{escapeVbsString\(cleanMat\)\}/g, 'A1BH0214C')
+    .replace(/\$\{escapeVbsString\(cleanPlant\)\}/g, '1012')
+    .replace(/\$\{escapeVbsString\(cleanAlt\)\}/g, '2')
+    .replace(/\$\{escapeVbsString\(cleanUsage\)\}/g, '1');
+
+  validateVbsSyntax(renderedDeleteVbs, 'deleteBomViaGui VBScript');
+
+  console.log('\n======================================================');
+  console.log('✅ ALL GENERATED VBSCRIPT SYNTAX VALIDATION TESTS PASSED!');
+  console.log('======================================================');
+}
+
+runVbsSyntaxTests().catch((err) => {
+  console.error('\n❌ VBScript syntax test failed:', err);
+  process.exit(1);
+});
