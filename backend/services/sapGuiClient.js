@@ -1409,11 +1409,87 @@ export async function createBomViaGui(params) {
     expectedUser = preflight.user || '';
   }
 
+  if (process.env.USE_MOCK_SAP === 'true') {
+    const cleanMat = String(material).trim().toUpperCase();
+    const cleanPlt = String(plant).trim();
+    const cleanUsg = String(bomUsage || '1').trim();
+    const cleanAlt = String(alternativeBom || '').trim();
+
+    let targetRecord = activeMockBomDataset.find(
+      b => b.material.toUpperCase() === cleanMat && b.plant === cleanPlt && b.bomUsage === cleanUsg
+    );
+
+    const resolvedAlt = cleanAlt || (targetRecord ? resolveNextAvailableAlternative(targetRecord.availableAlternatives || ['1'], '') : '1');
+
+    const normalizedComps = (Array.isArray(components) ? components : []).map((c, idx) => ({
+      item: c.item || c.posnr || String((idx + 1) * 10).padStart(4, '0'),
+      material: c.component || c.material || '',
+      description: c.description || '',
+      quantity: String(c.quantity || c.qty || '1'),
+      unit: c.unit || 'KG',
+      itemCategory: c.itemCategory || c.postp || 'L',
+      assembly: Boolean(c.assembly)
+    }));
+
+    if (targetRecord) {
+      if (!targetRecord.availableAlternatives.includes(resolvedAlt)) {
+        targetRecord.availableAlternatives.push(resolvedAlt);
+      }
+      if (!targetRecord.alternativeComponents) {
+        targetRecord.alternativeComponents = {};
+        const firstAlt = targetRecord.availableAlternatives[0] || '1';
+        targetRecord.alternativeComponents[firstAlt] = JSON.parse(JSON.stringify(targetRecord.components || []));
+      }
+      targetRecord.alternativeComponents[resolvedAlt] = JSON.parse(JSON.stringify(normalizedComps));
+      targetRecord.components = normalizedComps;
+      targetRecord.componentCount = normalizedComps.length;
+    } else {
+      targetRecord = {
+        material: cleanMat,
+        plant: cleanPlt,
+        bomUsage: cleanUsg,
+        availableAlternatives: [resolvedAlt],
+        componentCount: normalizedComps.length,
+        components: normalizedComps,
+        alternativeComponents: {
+          [resolvedAlt]: JSON.parse(JSON.stringify(normalizedComps))
+        }
+      };
+      activeMockBomDataset.push(targetRecord);
+    }
+
+    const firstComp = normalizedComps[0] || {};
+    return {
+      success: true,
+      verified: true,
+      code: 'BOM_CREATED_AND_VERIFIED',
+      message: `BOM for material ${cleanMat} in plant ${cleanPlt} (Alt ${resolvedAlt}) created successfully (Mock).`,
+      alternativeBom: resolvedAlt,
+      verifiedComponent: firstComp.material || '',
+      verifiedQty: firstComp.quantity || '1',
+      verifiedItemCategory: firstComp.itemCategory || 'L',
+      before: null,
+      after: {
+        material: cleanMat,
+        plant: cleanPlt,
+        bomUsage: cleanUsg,
+        alternativeBom: resolvedAlt,
+        validFrom: validFrom || '',
+        components: normalizedComps,
+        verifiedInSap: true,
+        status: 'CREATED_AND_VERIFIED_VIA_GUI',
+        guiMessage: 'Mock creation successful',
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+
   // 1. Build component line item script statements
   const componentStatements = [];
   const normalizedComponents = Array.isArray(components) ? components : [];
 
   normalizedComponents.forEach((item, idx) => {
+    const compPos = escapeVbsString(item.item || item.posnr || '');
     const compMaterial = escapeVbsString(item.component || item.material || item.id || '');
     const compQty = escapeVbsString(item.quantity || item.qty || '1');
     const compItemCat = escapeVbsString(item.itemCategory || item.postp || 'L'); // 'L' = Stock item (confirmed working)
@@ -1421,6 +1497,7 @@ export async function createBomViaGui(params) {
     if (compMaterial) {
       componentStatements.push(`
     ' Component Row ${idx + 1} (row index ${idx})
+    ${compPos ? `session.findById("${CS01_FIELD_IDS.TABLE_BASE}/txtRC29P-POSNR[0,${idx}]").text = "${compPos}"` : ''}
     session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${idx}]").text = "${compItemCat}"
     session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${idx}]").text = "${compMaterial}"
     session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${idx}]").text = "${compQty}"
@@ -2126,12 +2203,18 @@ export async function copyBomViaGui(params) {
     const srcMatch = activeMockBomDataset.find(
       (b) => b.material.toUpperCase() === cleanSourceMat && b.plant === cleanSourcePlant && b.bomUsage === cleanSourceUsage
     );
-    const srcComps = srcMatch ? JSON.parse(JSON.stringify(srcMatch.components || [])) : (sourceCheck.components || []);
+    const srcComps = (sourceCheck.components && sourceCheck.components.length > 0)
+      ? JSON.parse(JSON.stringify(sourceCheck.components))
+      : (srcMatch ? JSON.parse(JSON.stringify(srcMatch.components || [])) : []);
 
     // Insert or update target in activeMockBomDataset
     const existingTargetIndex = activeMockBomDataset.findIndex(
       (b) => b.material.toUpperCase() === cleanTargetMat && b.plant === cleanTargetPlant && b.bomUsage === cleanTargetUsage
     );
+
+    const targetAlreadyExists = existingTargetIndex >= 0;
+    const isCrossPlantExistingBom = (cleanSourcePlant !== cleanTargetPlant) && targetAlreadyExists;
+    const executionPath = isCrossPlantExistingBom ? 'CROSS_PLANT_DIRECT_ENTRY' : 'NATIVE_COPY_FROM';
 
     let resolvedTargetAlt = cleanTargetAlt;
     if (existingTargetIndex >= 0) {
@@ -2205,6 +2288,8 @@ export async function copyBomViaGui(params) {
       validFrom: target.validFrom || '',
       components: targetCs03.components || [],
       warnings: comparison.warnings,
+      executionPath,
+      isCrossPlantExistingBom,
       status: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'COPIED_WITH_WARNINGS_VIA_GUI' : 'COPIED_AND_VERIFIED_VIA_GUI'
     };
 
@@ -2213,6 +2298,8 @@ export async function copyBomViaGui(params) {
       verified: true,
       status: comparison.status,
       warnings: comparison.warnings,
+      executionPath,
+      isCrossPlantExistingBom,
       code: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'BOM_COPIED_WITH_WARNINGS' : 'BOM_COPIED_AND_VERIFIED',
       message: comparison.status === 'SUCCESS_WITH_WARNINGS'
         ? `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${resolvedTargetAlt}) copied from ${cleanSourceMat}/${cleanSourcePlant}. [SUCCESS_WITH_WARNINGS: ${comparison.warnings.map(w => w.reason).join('; ')}]`
@@ -2235,6 +2322,111 @@ export async function copyBomViaGui(params) {
   const resolvedTargetAlt = targetAlreadyExists
     ? resolveNextAvailableAlternative(targetCheck.availableAlternatives || ['1'], cleanTargetAlt)
     : resolveNextAvailableAlternative([], cleanTargetAlt);
+
+  const isCrossPlantExistingBom = (cleanSourcePlant !== cleanTargetPlant) && targetAlreadyExists;
+
+  if (isCrossPlantExistingBom) {
+    // PATH B: Cross-Plant Existing BOM
+    // When target material already has existing alternatives in target plant and sourcePlant !== targetPlant,
+    // SAP CS01 Copy From popup locks the reference plant to target plant.
+    // Therefore, do NOT use the Copy From popup; populate target alternative directly from verified source components.
+    const sourceComps = sourceCheck.components || [];
+    if (!sourceComps || sourceComps.length === 0) {
+      return {
+        success: false,
+        verified: false,
+        code: 'SOURCE_BOM_EMPTY',
+        message: `Cannot copy BOM: Source BOM for material ${cleanSourceMat} in plant ${cleanSourcePlant} (Alt ${cleanSourceAlt || '1'}) has no components.`
+      };
+    }
+
+    const createParams = {
+      material: cleanTargetMat,
+      plant: cleanTargetPlant,
+      bomUsage: cleanTargetUsage,
+      validFrom: target.validFrom || '',
+      alternativeBom: resolvedTargetAlt,
+      components: sourceComps.map((c, idx) => ({
+        item: c.item || c.posnr || String((idx + 1) * 10).padStart(4, '0'),
+        material: c.material || c.component || '',
+        component: c.material || c.component || '',
+        quantity: c.quantity || c.qty || '1',
+        unit: c.unit || 'KG',
+        itemCategory: c.itemCategory || c.postp || 'L',
+        description: c.description || '',
+        assembly: Boolean(c.assembly)
+      }))
+    };
+
+    const createRes = await createBomViaGui(createParams);
+    if (!createRes.success || createRes.verified === false) {
+      return {
+        success: false,
+        verified: false,
+        code: createRes.code || 'BOM_CREATE_FAILED',
+        message: `Failed to create Alternative ${resolvedTargetAlt} for material ${cleanTargetMat} in plant ${cleanTargetPlant}: ${createRes.message || 'Operation failed'}.`
+      };
+    }
+
+    // Verify exact newly created target alternative in CS03
+    const targetCs03 = await verifyBomInCs03({
+      material: cleanTargetMat,
+      plant: cleanTargetPlant,
+      bomUsage: cleanTargetUsage,
+      alternativeBom: resolvedTargetAlt
+    });
+
+    // Run structural comparison
+    const comparison = compareBomStructures({
+      sourceComponents: sourceComps,
+      targetComponents: targetCs03.components || [],
+      targetPlant: cleanTargetPlant,
+      missingSubBomMaterials: params.missingSubBomMaterials || [],
+      copiedMainOnly: params.copiedMainOnly !== undefined ? Boolean(params.copiedMainOnly) : true,
+      allowMissingSubBoms: Boolean(params.allowMissingSubBoms)
+    });
+
+    if (!comparison.match) {
+      return {
+        success: false,
+        verified: false,
+        code: 'STRUCTURAL_VERIFICATION_FAILED',
+        message: comparison.summary,
+        differences: comparison.differences,
+        before: null,
+        after: null
+      };
+    }
+
+    const createdRecord = {
+      material: cleanTargetMat,
+      plant: cleanTargetPlant,
+      bomUsage: cleanTargetUsage,
+      alternativeBom: resolvedTargetAlt,
+      validFrom: target.validFrom || '',
+      components: targetCs03.components || [],
+      warnings: comparison.warnings,
+      executionPath: 'CROSS_PLANT_DIRECT_ENTRY',
+      isCrossPlantExistingBom: true,
+      status: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'COPIED_WITH_WARNINGS_VIA_GUI' : 'COPIED_AND_VERIFIED_VIA_GUI'
+    };
+
+    return {
+      success: true,
+      verified: true,
+      status: comparison.status,
+      warnings: comparison.warnings,
+      executionPath: 'CROSS_PLANT_DIRECT_ENTRY',
+      isCrossPlantExistingBom: true,
+      code: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'BOM_COPIED_WITH_WARNINGS' : 'BOM_COPIED_AND_VERIFIED',
+      message: comparison.status === 'SUCCESS_WITH_WARNINGS'
+        ? `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${resolvedTargetAlt}) created directly from source components ${cleanSourceMat}/${cleanSourcePlant} (cross-plant alternative). [SUCCESS_WITH_WARNINGS: ${comparison.warnings.map(w => w.reason).join('; ')}]`
+        : `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${resolvedTargetAlt}) created directly from source components ${cleanSourceMat}/${cleanSourcePlant} (cross-plant alternative) and verified in CS03.`,
+      before: null,
+      after: createdRecord,
+      alternativeBom: resolvedTargetAlt
+    };
+  }
 
   const sourceMaterial = escapeVbsString(source.material);
   const sourcePlant = escapeVbsString(source.plant);
@@ -3001,6 +3193,8 @@ WScript.Echo "{""success"":true,""verified"":true,""message"":""" & safeSaveMsg 
       verifiedQty: parsedResult.verifiedQty,
       verifiedItemCategory: parsedResult.verifiedItemCategory,
       validationEntersCount: parsedResult.validationEntersCount || 0,
+      executionPath: 'NATIVE_COPY_FROM',
+      isCrossPlantExistingBom: false,
       status: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'COPIED_WITH_WARNINGS_VIA_GUI' : 'COPIED_AND_VERIFIED_VIA_GUI',
       guiMessage: parsedResult.message,
       capturedControls: parsedResult.capturedControls,
@@ -3016,6 +3210,9 @@ WScript.Echo "{""success"":true,""verified"":true,""message"":""" & safeSaveMsg 
       verified: true,
       status: comparison.status,
       warnings: comparison.warnings,
+      executionPath: 'NATIVE_COPY_FROM',
+      isCrossPlantExistingBom: false,
+      alternativeBom: parsedResult.alternativeBom || target.alternativeBom || '1',
       bomNumber: parsedResult.bomNumber || target.material,
       message: comparison.status === 'SUCCESS_WITH_WARNINGS'
         ? `${parsedResult.message} [SUCCESS_WITH_WARNINGS: ${comparison.warnings.map(w => w.reason).join('; ')}]`

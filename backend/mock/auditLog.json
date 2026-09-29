@@ -1,6 +1,6 @@
 [
   {
-    "logId": "audit_1790660578418_5b4a9d20",
+    "logId": "audit_1790665371151_c3df80cc",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -177,14 +177,16 @@
           "reason": "Component C1BH0214C (Item 0020): Asm is unchecked in target plant (1012) because its sub-BOM does not exist in target plant."
         }
       ],
+      "executionPath": "NATIVE_COPY_FROM",
+      "isCrossPlantExistingBom": false,
       "status": "COPIED_WITH_WARNINGS_VIA_GUI"
     },
     "sourcePrompt": "Copy BOM from Material A1BH0214C Plant 1001 Usage 1 → to Material A1BH0214C Plant 1012 Usage 1",
-    "actionId": "act_1790660578416_e013670f_bom_0_A1BH0214C_alt1",
-    "timestamp": "2026-09-29T05:42:58.418Z"
+    "actionId": "act_1790665371150_79b7a902_bom_0_A1BH0214C_alt1",
+    "timestamp": "2026-09-29T07:02:51.151Z"
   },
   {
-    "logId": "audit_1790660578419_2639b421",
+    "logId": "audit_1790665371153_dbe2af4c",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -256,14 +258,16 @@
         }
       ],
       "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
-    "actionId": "act_1790660578416_e013670f_bom_1_B1BH0214C_alt2",
-    "timestamp": "2026-09-29T05:42:58.419Z"
+    "actionId": "act_1790665371150_79b7a902_bom_1_B1BH0214C_alt2",
+    "timestamp": "2026-09-29T07:02:51.153Z"
   },
   {
-    "logId": "audit_1790660578419_a98a4088",
+    "logId": "audit_1790665371153_bbb9e914",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -299,14 +303,16 @@
         }
       ],
       "warnings": [],
+      "executionPath": "NATIVE_COPY_FROM",
+      "isCrossPlantExistingBom": false,
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
-    "actionId": "act_1790660578416_e013670f_bom_1_C1BH0214C_alt1",
-    "timestamp": "2026-09-29T05:42:58.419Z"
+    "actionId": "act_1790665371150_79b7a902_bom_1_C1BH0214C_alt1",
+    "timestamp": "2026-09-29T07:02:51.153Z"
   },
   {
-    "logId": "audit_1790660578420_b64c0bb8",
+    "logId": "audit_1790665371154_e7f9ea55",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -369,14 +375,16 @@
         }
       ],
       "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Hierarchy sub-BOM copy (depth 2) for main BOM A1BH0214C",
-    "actionId": "act_1790660578416_e013670f_bom_2_C2BH0214C_alt2",
-    "timestamp": "2026-09-29T05:42:58.420Z"
+    "actionId": "act_1790665371150_79b7a902_bom_2_C2BH0214C_alt2",
+    "timestamp": "2026-09-29T07:02:51.154Z"
   },
   {
-    "logId": "audit_1790660578421_865eb65a",
+    "logId": "audit_1790665371155_cb028c66",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -448,14 +456,16 @@
         }
       ],
       "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
-    "actionId": "act_1790660578416_e013670f_bom_1_PPBH0001C_alt2",
-    "timestamp": "2026-09-29T05:42:58.421Z"
+    "actionId": "act_1790665371150_79b7a902_bom_1_PPBH0001C_alt2",
+    "timestamp": "2026-09-29T07:02:51.155Z"
   },
   {
-    "logId": "audit_1790660578421_fd29f80b",
+    "logId": "audit_1790665371156_7bbb2fe3",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -491,14 +501,16 @@
         }
       ],
       "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
-    "actionId": "act_1790660578416_e013670f_bom_1_C1HL0003C_alt2",
-    "timestamp": "2026-09-29T05:42:58.421Z"
+    "actionId": "act_1790665371150_79b7a902_bom_1_C1HL0003C_alt2",
+    "timestamp": "2026-09-29T07:02:51.156Z"
   },
   {
-    "logId": "audit_1790660578427_a7179c11",
+    "logId": "audit_1790665371161_74b0cd68",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -534,10 +546,12 @@
         }
       ],
       "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Copy BOM from Material EXISTING_MAT Plant 1001 Usage 1 → to Material EXISTING_MAT Plant 1012 Usage 1",
-    "actionId": "act_1790660578425_8d1a2b74_bom_0_EXISTING_MAT_alt2",
-    "timestamp": "2026-09-29T05:42:58.427Z"
+    "actionId": "act_1790665371160_a67e264d_bom_0_EXISTING_MAT_alt2",
+    "timestamp": "2026-09-29T07:02:51.161Z"
   }
 ]
