@@ -192,15 +192,30 @@ export function setMockBomAlternatives(material, plant, bomUsage = '1', alternat
   if (existing) {
     existing.availableAlternatives = alts;
     if (componentCount !== undefined) existing.componentCount = componentCount;
-    if (components) existing.components = components;
+    if (components) {
+      existing.components = components;
+      if (!existing.alternativeComponents) existing.alternativeComponents = {};
+      for (const a of alts) {
+        if (!existing.alternativeComponents[a]) {
+          existing.alternativeComponents[a] = JSON.parse(JSON.stringify(components));
+        }
+      }
+    }
   } else {
+    const altComps = {};
+    if (components) {
+      for (const a of alts) {
+        altComps[a] = JSON.parse(JSON.stringify(components));
+      }
+    }
     activeMockBomDataset.push({
       material: matUpper,
       plant: plantStr,
       bomUsage: usageStr,
       availableAlternatives: alts,
       componentCount,
-      components: components || [{ itemCategory: 'L' }]
+      components: components || [{ itemCategory: 'L' }],
+      alternativeComponents: altComps
     });
   }
 }
@@ -3952,6 +3967,7 @@ export async function verifyHierarchyStructure({
 export async function inspectAndVerifyHierarchy({
   source,
   target,
+  targetAltMap = null,
   maxDepth = 5,
   isReverify = false
 }) {
@@ -4006,7 +4022,7 @@ export async function inspectAndVerifyHierarchy({
 
     const srcComps = srcRes.components || [];
 
-    // 2. Fetch Target BOM in CS03
+    // 2. Fetch Target BOM in CS03 using exact target alternative
     const tgtRes = await verifyBomInCs03({
       material: currentTgtMat,
       plant: currentTgtPlant,
@@ -4034,6 +4050,10 @@ export async function inspectAndVerifyHierarchy({
         for (const sc of srcComps) {
           if (toBool(sc.assembly)) {
             const scMat = String(sc.material || '').trim().toUpperCase();
+            const childTargetKey = `${scMat}:${currentTgtPlant}:${currentTgtUsage}`;
+            const recordedTgtAlt = targetAltMap
+              ? (targetAltMap instanceof Map ? targetAltMap.get(childTargetKey) : targetAltMap[childTargetKey])
+              : null;
             await traverse(
               scMat,
               currentSrcPlant,
@@ -4042,7 +4062,7 @@ export async function inspectAndVerifyHierarchy({
               scMat,
               currentTgtPlant,
               currentTgtUsage,
-              '',
+              recordedTgtAlt || '',
               depth + 1,
               currentSrcMat
             );
@@ -4054,15 +4074,16 @@ export async function inspectAndVerifyHierarchy({
 
     const tgtComps = tgtRes.components || [];
 
-    // 3. Compare structure
-    const tgtByPos = new Map();
-    const tgtByMat = new Map();
-    for (const tc of tgtComps) {
-      if (tc.item) tgtByPos.set(String(tc.item).trim(), tc);
-      if (tc.material) tgtByMat.set(String(tc.material).trim().toUpperCase(), tc);
-    }
+    // 3. Compare structure using material-first deterministic matching
+    const tgtMap = new Map();
+    tgtComps.forEach((tc, idx) => {
+      const matKey = String(tc.material || '').trim().toUpperCase();
+      if (!tgtMap.has(matKey)) {
+        tgtMap.set(matKey, []);
+      }
+      tgtMap.get(matKey).push({ comp: tc, matched: false, index: idx });
+    });
 
-    // Component count check
     if (srcComps.length !== tgtComps.length) {
       discrepancies.push(`Component count mismatch for BOM ${currentTgtMat}: source has ${srcComps.length}, target has ${tgtComps.length}`);
     }
@@ -4070,34 +4091,40 @@ export async function inspectAndVerifyHierarchy({
     for (const sc of srcComps) {
       const scMat = String(sc.material || '').trim().toUpperCase();
       const scItem = String(sc.item || '').trim();
-      const tc = tgtByPos.get(scItem) || tgtByMat.get(scMat);
 
-      if (!tc) {
-        discrepancies.push(`Component Item ${scItem} (${scMat}) is missing in target BOM ${currentTgtMat}`);
+      const candidates = tgtMap.get(scMat) || [];
+      let candidate = candidates.find(
+        (c) => !c.matched && Math.abs(parseFloat(sc.quantity) - parseFloat(c.comp.quantity)) < 0.0001
+      );
+      if (!candidate) {
+        candidate = candidates.find((c) => !c.matched);
+      }
+
+      if (!candidate) {
+        discrepancies.push(`Component material ${scMat} (item ${scItem || '?'}) is missing in target BOM ${currentTgtMat}`);
         continue;
       }
 
-      const tcMat = String(tc.material || '').trim().toUpperCase();
-      if (scMat !== tcMat) {
-        discrepancies.push(`Material mismatch at Item ${scItem} in BOM ${currentTgtMat}: source has ${scMat}, target has ${tcMat}`);
-      }
+      candidate.matched = true;
+      const tc = candidate.comp;
+      const tcItem = String(tc.item || '').trim();
 
       const sQty = parseFloat(sc.quantity);
       const tQty = parseFloat(tc.quantity);
       if (!isNaN(sQty) && !isNaN(tQty) && Math.abs(sQty - tQty) > 0.0001) {
-        discrepancies.push(`Quantity mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.quantity}, target has ${tc.quantity}`);
+        discrepancies.push(`Quantity mismatch for Item ${scItem || tcItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.quantity}, target has ${tc.quantity}`);
       }
 
       const sUnit = String(sc.unit || '').trim().toUpperCase();
       const tUnit = String(tc.unit || '').trim().toUpperCase();
       if (sUnit && tUnit && sUnit !== tUnit) {
-        discrepancies.push(`Unit mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.unit}, target has ${tc.unit}`);
+        discrepancies.push(`Unit mismatch for Item ${scItem || tcItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.unit}, target has ${tc.unit}`);
       }
 
       const sCat = String(sc.itemCategory || '').trim().toUpperCase();
       const tCat = String(tc.itemCategory || '').trim().toUpperCase();
       if (sCat && tCat && sCat !== tCat) {
-        discrepancies.push(`Item category mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.itemCategory}, target has ${tc.itemCategory}`);
+        discrepancies.push(`Item category mismatch for Item ${scItem || tcItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.itemCategory}, target has ${tc.itemCategory}`);
       }
 
       const sAsm = toBool(sc.assembly);
@@ -4105,13 +4132,23 @@ export async function inspectAndVerifyHierarchy({
 
       let childExistsInTarget = false;
       let targetChildCheck = null;
+      let nextTgtAlt = '';
+
       if (sAsm) {
+        const childTargetKey = `${scMat}:${currentTgtPlant}:${currentTgtUsage}`;
+        const recordedTgtAlt = targetAltMap
+          ? (targetAltMap instanceof Map ? targetAltMap.get(childTargetKey) : targetAltMap[childTargetKey])
+          : null;
+
         targetChildCheck = await verifyBomInCs03({
           material: scMat,
           plant: currentTgtPlant,
-          bomUsage: currentTgtUsage
+          bomUsage: currentTgtUsage,
+          alternativeBom: recordedTgtAlt || ''
         });
+
         childExistsInTarget = Boolean(targetChildCheck.success && targetChildCheck.exists);
+        nextTgtAlt = recordedTgtAlt || (targetChildCheck?.availableAlternatives && targetChildCheck.availableAlternatives[0]) || '';
 
         if (!childExistsInTarget) {
           addMissingSubBom({
@@ -4129,18 +4166,17 @@ export async function inspectAndVerifyHierarchy({
           }
         } else {
           if (!tAsm) {
-            discrepancies.push(`Assembly indicator mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: child BOM exists in plant ${currentTgtPlant} but Asm is unchecked`);
+            discrepancies.push(`Assembly indicator mismatch for Item ${scItem || tcItem} (${scMat}) in BOM ${currentTgtMat}: child BOM exists in plant ${currentTgtPlant} but Asm is unchecked`);
           }
         }
       } else {
         if (tAsm) {
-          discrepancies.push(`Assembly indicator mismatch for Item ${scItem} (${scMat}) in BOM ${currentTgtMat}: source Asm=false, target Asm=true`);
+          discrepancies.push(`Assembly indicator mismatch for Item ${scItem || tcItem} (${scMat}) in BOM ${currentTgtMat}: source Asm=false, target Asm=true`);
         }
       }
 
       // Recurse into child BOM if sAsm is true
       if (sAsm && depth + 1 < maxDepth) {
-        const nextTgtAlt = (targetChildCheck?.availableAlternatives && targetChildCheck.availableAlternatives[0]) || '';
         await traverse(
           scMat,
           currentSrcPlant,
@@ -4156,6 +4192,15 @@ export async function inspectAndVerifyHierarchy({
       }
     }
 
+    // Flag extra components in target
+    for (const [matKey, candidates] of tgtMap.entries()) {
+      for (const c of candidates) {
+        if (!c.matched) {
+          discrepancies.push(`Extra component in target BOM ${currentTgtMat}: material ${matKey} (item ${c.comp.item || '?'})`);
+        }
+      }
+    }
+
     verifiedBoms.push({
       material: currentTgtMat,
       plant: currentTgtPlant,
@@ -4165,6 +4210,10 @@ export async function inspectAndVerifyHierarchy({
     });
   }
 
+  const resolvedMainTgtAlt = targetAltMap
+    ? (targetAltMap instanceof Map ? targetAltMap.get(`${cleanTgtMat}:${cleanTgtPlant}:${cleanTgtUsage}`) : targetAltMap[`${cleanTgtMat}:${cleanTgtPlant}:${cleanTgtUsage}`])
+    : cleanTgtAlt;
+
   await traverse(
     cleanSrcMat,
     cleanSrcPlant,
@@ -4173,7 +4222,7 @@ export async function inspectAndVerifyHierarchy({
     cleanTgtMat,
     cleanTgtPlant,
     cleanTgtUsage,
-    cleanTgtAlt,
+    resolvedMainTgtAlt || cleanTgtAlt,
     0
   );
 
@@ -4252,7 +4301,8 @@ export async function repairHierarchyBottomUp({
       source: {
         material: sub.sourceMaterial || sub.material,
         plant: sub.sourcePlant,
-        bomUsage: sub.bomUsage || '1'
+        bomUsage: sub.bomUsage || '1',
+        alternativeBom: sub.sourceAlternative || ''
       },
       target: {
         material: sub.material,
@@ -4273,9 +4323,13 @@ export async function repairHierarchyBottomUp({
 
     const createdRecord = {
       material: sub.material,
-      plant: sub.targetPlant,
-      bomUsage: sub.bomUsage || '1',
+      sourceMaterial: sub.sourceMaterial || sub.material,
+      sourcePlant: sub.sourcePlant,
+      sourceAlternative: sub.sourceAlternative || '1',
+      targetPlant: sub.targetPlant,
+      targetAlternative: resolvedAlt,
       alternativeBom: resolvedAlt,
+      bomUsage: sub.bomUsage || '1',
       depth: sub.depth,
       isMain: false,
       after: copyRes.after
@@ -4291,10 +4345,11 @@ export async function repairHierarchyBottomUp({
 /**
  * Executes the complete COPY → VERIFY → REPAIR → VERIFY workflow.
  *
- * STEP 1: Copies initial main BOM into target plant under next available alternative.
- * STEP 2: Verifies hierarchy and identifies any missing sub-BOMs.
- * STEP 3: Repairs missing sub-BOMs in bottom-up order (deepest first), creating new alternatives if needed.
- * STEP 4: Re-verifies complete hierarchy from top down until 100% parity is confirmed.
+ * STEP 1: Copies full hierarchy recursively using native CS01 Copy From.
+ *         Existing target alternatives are preserved; new copies are created under next available alternative.
+ * STEP 2: Verifies hierarchy against the exact newly-created target alternatives.
+ * STEP 3: Repairs any missing sub-BOMs in bottom-up order if needed.
+ * STEP 4: Re-verifies complete hierarchy until 100% parity is confirmed.
  *
  * @param {object} params
  * @param {object} params.source - { material, plant, bomUsage, alternativeBom }
@@ -4323,62 +4378,138 @@ export async function copyBomHierarchyWithRepair({
   const cleanTgtUsage = String(target?.bomUsage || '1').trim();
   const cleanTgtAlt = String(target?.alternativeBom || '').trim();
 
-  // STEP 1: COPY initial BOM
-  onProgress?.('Copying BOM...');
+  const createdBoms = [];
+  const targetAltMap = new Map();
+  const visited = new Set();
+  let maxDepthReached = 0;
 
-  // Target alternative selection rule for main BOM
-  const targetCheck = await verifyBomInCs03({
-    material: cleanTgtMat,
-    plant: cleanTgtPlant,
-    bomUsage: cleanTgtUsage
-  });
+  async function copyRecursive(srcMat, srcPlant, srcUsage, srcAlt, tgtMat, tgtPlant, tgtUsage, tgtAlt, depth, isMain = false) {
+    maxDepthReached = Math.max(maxDepthReached, depth);
+    if (depth > maxDepth) return;
 
-  const existingTargetAlts = (targetCheck.success && targetCheck.exists)
-    ? (targetCheck.availableAlternatives || ['1'])
-    : [];
+    const cycleKey = `${srcMat}:${srcPlant}:${srcUsage}`;
+    if (visited.has(cycleKey)) return;
+    visited.add(cycleKey);
 
-  const resolvedTargetAlt = resolveNextAvailableAlternative(existingTargetAlts, cleanTgtAlt);
+    // Target alternative selection:
+    // Check existing alternatives in target plant for this BOM
+    const targetCheck = await verifyBomInCs03({
+      material: tgtMat,
+      plant: tgtPlant,
+      bomUsage: tgtUsage
+    });
 
-  const mainCopyRes = await copyBomViaGui({
-    source: {
-      material: cleanSrcMat,
-      plant: cleanSrcPlant,
-      bomUsage: cleanSrcUsage,
-      alternativeBom: cleanSrcAlt
-    },
-    target: {
-      material: cleanTgtMat,
-      plant: cleanTgtPlant,
-      bomUsage: cleanTgtUsage,
+    const existingTargetAlts = (targetCheck.success && targetCheck.exists)
+      ? (targetCheck.availableAlternatives || ['1'])
+      : [];
+
+    const resolvedTargetAlt = resolveNextAvailableAlternative(existingTargetAlts, tgtAlt);
+
+    onProgress?.(isMain
+      ? `Copying Main BOM ${tgtMat} to plant ${tgtPlant} (Alternative ${resolvedTargetAlt})...`
+      : `Copying Sub-BOM (depth ${depth}) ${tgtMat} to plant ${tgtPlant} (Alternative ${resolvedTargetAlt})...`
+    );
+
+    const copyRes = await copyBomViaGui({
+      source: {
+        material: srcMat,
+        plant: srcPlant,
+        bomUsage: srcUsage,
+        alternativeBom: srcAlt
+      },
+      target: {
+        material: tgtMat,
+        plant: tgtPlant,
+        bomUsage: tgtUsage,
+        alternativeBom: resolvedTargetAlt,
+        validFrom: validFrom || target.validFrom || ''
+      },
+      copiedMainOnly: true,
+      allowMissingSubBoms: true
+    });
+
+    if (!copyRes.success || copyRes.verified === false) {
+      const err = new Error(`${isMain ? 'Main' : 'Sub-'} BOM copy failed for material ${tgtMat} in plant ${tgtPlant} (Alternative ${resolvedTargetAlt}): ${copyRes.message || 'Operation failed'}.`);
+      err.code = copyRes.code || 'COPY_BOM_FAILED';
+      err.failedBom = { material: tgtMat, plant: tgtPlant, alternative: resolvedTargetAlt };
+      throw err;
+    }
+
+    const record = {
+      material: tgtMat,
+      sourceMaterial: srcMat,
+      sourcePlant: srcPlant,
+      sourceAlternative: srcAlt || '1',
+      targetPlant: tgtPlant,
+      targetAlternative: resolvedTargetAlt,
       alternativeBom: resolvedTargetAlt,
-      validFrom: validFrom || target.validFrom || ''
-    },
-    copiedMainOnly: true,
-    allowMissingSubBoms: true
-  });
+      bomUsage: tgtUsage,
+      depth,
+      isMain,
+      after: copyRes.after
+    };
 
-  if (!mainCopyRes.success || mainCopyRes.verified === false) {
-    const err = new Error(`Main BOM copy failed for material ${cleanTgtMat} in plant ${cleanTgtPlant} (Alternative ${resolvedTargetAlt}): ${mainCopyRes.message || 'Operation failed'}.`);
-    err.code = mainCopyRes.code || 'COPY_BOM_FAILED';
-    err.failedBom = { material: cleanTgtMat, plant: cleanTgtPlant, alternative: resolvedTargetAlt };
-    throw err;
+    targetAltMap.set(`${tgtMat}:${tgtPlant}:${tgtUsage}`, resolvedTargetAlt);
+    auditHook?.(record, resolvedTargetAlt, copyRes);
+    createdBoms.push(record);
+
+    // Identify assemblies from the source BOM
+    const srcRes = await verifyBomInCs03({
+      material: srcMat,
+      plant: srcPlant,
+      bomUsage: srcUsage,
+      alternativeBom: srcAlt
+    });
+
+    const components = srcRes.components || copyRes.after?.components || [];
+
+    // Recurse into every assembly component
+    for (const comp of components) {
+      if (toBool(comp.assembly)) {
+        const childMat = String(comp.material || '').trim().toUpperCase();
+        if (!childMat) continue;
+
+        const childTargetKey = `${childMat}:${tgtPlant}:${tgtUsage}`;
+        if (targetAltMap.has(childTargetKey)) {
+          continue;
+        }
+
+        await copyRecursive(
+          childMat,
+          srcPlant,
+          srcUsage,
+          '',
+          childMat,
+          tgtPlant,
+          tgtUsage,
+          '',
+          depth + 1,
+          false
+        );
+      }
+    }
   }
 
-  const mainRecord = {
-    material: cleanTgtMat,
-    plant: cleanTgtPlant,
-    bomUsage: cleanTgtUsage,
-    alternativeBom: resolvedTargetAlt,
-    depth: 0,
-    isMain: true,
-    after: mainCopyRes.after
-  };
+  // STEP 1: Execute recursive copy starting at Main BOM (depth 0)
+  onProgress?.('Copying BOM hierarchy...');
+  await copyRecursive(
+    cleanSrcMat,
+    cleanSrcPlant,
+    cleanSrcUsage,
+    cleanSrcAlt,
+    cleanTgtMat,
+    cleanTgtPlant,
+    cleanTgtUsage,
+    cleanTgtAlt,
+    0,
+    true
+  );
 
-  auditHook?.(mainRecord, resolvedTargetAlt, mainCopyRes);
-  const createdBoms = [mainRecord];
+  const mainRecord = createdBoms[0];
+  const mainTargetAlt = targetAltMap.get(`${cleanTgtMat}:${cleanTgtPlant}:${cleanTgtUsage}`) || '1';
 
-  // STEP 2: VERIFY hierarchy
-  onProgress?.('Verifying BOM structure...');
+  // STEP 2: VERIFY complete hierarchy using exact created target alternatives
+  onProgress?.('Verifying complete structure...');
   const initialVerify = await inspectAndVerifyHierarchy({
     source: {
       material: cleanSrcMat,
@@ -4390,19 +4521,23 @@ export async function copyBomHierarchyWithRepair({
       material: cleanTgtMat,
       plant: cleanTgtPlant,
       bomUsage: cleanTgtUsage,
-      alternativeBom: resolvedTargetAlt
+      alternativeBom: mainTargetAlt
     },
+    targetAltMap,
     maxDepth,
     isReverify: false
   });
 
-  // STEP 3: REPAIR missing sub-BOMs
+  // STEP 3: REPAIR missing sub-BOMs if any
   if (initialVerify.missingSubBoms && initialVerify.missingSubBoms.length > 0) {
     const repaired = await repairHierarchyBottomUp({
       missingSubBoms: initialVerify.missingSubBoms,
       onProgress,
       auditHook
     });
+    for (const rep of repaired) {
+      targetAltMap.set(`${rep.material}:${rep.plant}:${rep.bomUsage}`, rep.alternativeBom);
+    }
     createdBoms.push(...repaired);
   }
 
@@ -4419,8 +4554,9 @@ export async function copyBomHierarchyWithRepair({
       material: cleanTgtMat,
       plant: cleanTgtPlant,
       bomUsage: cleanTgtUsage,
-      alternativeBom: resolvedTargetAlt
+      alternativeBom: mainTargetAlt
     },
+    targetAltMap,
     maxDepth,
     isReverify: true
   });
@@ -4555,35 +4691,45 @@ export function compareBomStructures({
     );
   }
 
-  const targetByPos = new Map();
-  const targetByMat = new Map();
-  for (const tc of targetComponents) {
-    if (tc.item) targetByPos.set(String(tc.item).trim(), tc);
-    if (tc.material) targetByMat.set(String(tc.material).trim().toUpperCase(), tc);
-  }
+  // Material-first deterministic component matching:
+  // Item numbers (POSNR) are attributes, NOT primary identity keys.
+  const targetMap = new Map();
+  targetComponents.forEach((tc, idx) => {
+    const matKey = String(tc.material || '').trim().toUpperCase();
+    if (!targetMap.has(matKey)) {
+      targetMap.set(matKey, []);
+    }
+    targetMap.get(matKey).push({ comp: tc, matched: false, index: idx });
+  });
 
   for (const sc of sourceComponents) {
     const scMat = String(sc.material || '').trim().toUpperCase();
     const scItem = String(sc.item || '').trim();
 
-    const tc = targetByPos.get(scItem) || targetByMat.get(scMat);
+    const candidates = targetMap.get(scMat) || [];
+    // Deterministic matching: find first unmatched candidate with matching quantity, else first unmatched
+    let candidate = candidates.find(
+      (c) => !c.matched && Math.abs(parseFloat(sc.quantity) - parseFloat(c.comp.quantity)) < 0.0001
+    );
+    if (!candidate) {
+      candidate = candidates.find((c) => !c.matched);
+    }
 
-    if (!tc) {
-      differences.push(`Component Item ${scItem} (${scMat}) is missing in target BOM`);
+    if (!candidate) {
+      differences.push(`Component material ${scMat} (item ${scItem || '?'}) is missing in target BOM`);
       continue;
     }
 
-    const tcMat = String(tc.material || '').trim().toUpperCase();
-    if (scMat !== tcMat) {
-      differences.push(`Material mismatch at Item ${scItem}: source has ${scMat}, target has ${tcMat}`);
-    }
+    candidate.matched = true;
+    const tc = candidate.comp;
+    const tcItem = String(tc.item || '').trim();
 
     // Compare quantity
     const sQty = parseFloat(sc.quantity);
     const tQty = parseFloat(tc.quantity);
     if (!isNaN(sQty) && !isNaN(tQty) && Math.abs(sQty - tQty) > 0.0001) {
       differences.push(
-        `Quantity mismatch for Item ${scItem} (${scMat}): source has ${sc.quantity}, target has ${tc.quantity}`
+        `Quantity mismatch for Item ${scItem || tcItem} (${scMat}): source has ${sc.quantity}, target has ${tc.quantity}`
       );
     }
 
@@ -4592,7 +4738,7 @@ export function compareBomStructures({
     const tUnit = String(tc.unit || '').trim().toUpperCase();
     if (sUnit && tUnit && sUnit !== tUnit) {
       differences.push(
-        `Unit mismatch for Item ${scItem} (${scMat}): source has ${sc.unit}, target has ${tc.unit}`
+        `Unit mismatch for Item ${scItem || tcItem} (${scMat}): source has ${sc.unit}, target has ${tc.unit}`
       );
     }
 
@@ -4601,7 +4747,7 @@ export function compareBomStructures({
     const tCat = String(tc.itemCategory || '').trim().toUpperCase();
     if (sCat && tCat && sCat !== tCat) {
       differences.push(
-        `Item category mismatch for Item ${scItem} (${scMat}): source has ${sc.itemCategory}, target has ${tc.itemCategory}`
+        `Item category mismatch for Item ${scItem || tcItem} (${scMat}): source has ${sc.itemCategory}, target has ${tc.itemCategory}`
       );
     }
 
@@ -4638,8 +4784,17 @@ export function compareBomStructures({
       } else {
         // UNEXPLAINED difference: FAILURE!
         differences.push(
-          `Assembly indicator mismatch for Item ${scItem} (${scMat}): source Asm=${sAsm}, target Asm=${tAsm}`
+          `Assembly indicator mismatch for Item ${scItem || tcItem} (${scMat}): source Asm=${sAsm}, target Asm=${tAsm}`
         );
+      }
+    }
+  }
+
+  // Flag any unmatched target components as extra
+  for (const [matKey, candidates] of targetMap.entries()) {
+    for (const c of candidates) {
+      if (!c.matched) {
+        differences.push(`Extra component in target BOM: material ${matKey} (item ${c.comp.item || '?'})`);
       }
     }
   }

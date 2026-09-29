@@ -1,6 +1,6 @@
 [
   {
-    "logId": "audit_1790656302733_82b19ac8",
+    "logId": "audit_1790660578418_5b4a9d20",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -180,11 +180,90 @@
       "status": "COPIED_WITH_WARNINGS_VIA_GUI"
     },
     "sourcePrompt": "Copy BOM from Material A1BH0214C Plant 1001 Usage 1 → to Material A1BH0214C Plant 1012 Usage 1",
-    "actionId": "act_1790656302732_fbec61d4_bom_0_A1BH0214C_alt1",
-    "timestamp": "2026-09-29T04:31:42.733Z"
+    "actionId": "act_1790660578416_e013670f_bom_0_A1BH0214C_alt1",
+    "timestamp": "2026-09-29T05:42:58.418Z"
   },
   {
-    "logId": "audit_1790656302735_a471b25b",
+    "logId": "audit_1790660578419_2639b421",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "B1BH0214C",
+    "businessPartnerId": "B1BH0214C",
+    "task": "Sub-BOM Copy (B1BH0214C)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom B1BH0214C",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "B1BH0214C",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "2",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "RAW_EVA_01",
+          "description": "EVA COMPOUND",
+          "quantity": "50",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0020",
+          "material": "RAW_CHEM_02",
+          "description": "BLOWING AGENT",
+          "quantity": "2",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0030",
+          "material": "RAW_PIG_03",
+          "description": "BLACK PIGMENT",
+          "quantity": "1",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0040",
+          "material": "RAW_ZINC_04",
+          "description": "ZINC OXIDE",
+          "quantity": "0.5",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0050",
+          "material": "RAW_STEAR_05",
+          "description": "STEARIC ACID",
+          "quantity": "0.5",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
+    "actionId": "act_1790660578416_e013670f_bom_1_B1BH0214C_alt2",
+    "timestamp": "2026-09-29T05:42:58.419Z"
+  },
+  {
+    "logId": "audit_1790660578419_a98a4088",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -223,11 +302,203 @@
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
-    "actionId": "act_1790656302732_fbec61d4_bom_1_C1BH0214C_alt1",
-    "timestamp": "2026-09-29T04:31:42.735Z"
+    "actionId": "act_1790660578416_e013670f_bom_1_C1BH0214C_alt1",
+    "timestamp": "2026-09-29T05:42:58.419Z"
   },
   {
-    "logId": "audit_1790656302740_d0cc444e",
+    "logId": "audit_1790660578420_b64c0bb8",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "C2BH0214C",
+    "businessPartnerId": "C2BH0214C",
+    "task": "Sub-BOM Copy (C2BH0214C)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom C2BH0214C",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "C2BH0214C",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "2",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "RAW_RUBBER_01",
+          "description": "SYNTHETIC RUBBER",
+          "quantity": "10",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0020",
+          "material": "RAW_SULFUR_02",
+          "description": "SULFUR",
+          "quantity": "0.2",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0030",
+          "material": "RAW_ACCEL_03",
+          "description": "ACCELERATOR",
+          "quantity": "0.1",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0040",
+          "material": "RAW_OIL_04",
+          "description": "AROMATIC OIL",
+          "quantity": "0.5",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 2) for main BOM A1BH0214C",
+    "actionId": "act_1790660578416_e013670f_bom_2_C2BH0214C_alt2",
+    "timestamp": "2026-09-29T05:42:58.420Z"
+  },
+  {
+    "logId": "audit_1790660578421_865eb65a",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "PPBH0001C",
+    "businessPartnerId": "PPBH0001C",
+    "task": "Sub-BOM Copy (PPBH0001C)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom PPBH0001C",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "PPBH0001C",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "2",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "PKG_BOX_01",
+          "description": "INNER BOX",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0020",
+          "material": "PKG_POLY_02",
+          "description": "POLYBAG",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0030",
+          "material": "PKG_LBL_03",
+          "description": "SIZE LABEL",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0040",
+          "material": "PKG_HANGER_04",
+          "description": "PLASTIC HANGER",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0050",
+          "material": "PKG_TAG_05",
+          "description": "PRICE TAG",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
+    "actionId": "act_1790660578416_e013670f_bom_1_PPBH0001C_alt2",
+    "timestamp": "2026-09-29T05:42:58.421Z"
+  },
+  {
+    "logId": "audit_1790660578421_fd29f80b",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "C1HL0003C",
+    "businessPartnerId": "C1HL0003C",
+    "task": "Sub-BOM Copy (C1HL0003C)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom C1HL0003C",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "C1HL0003C",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "2",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "RAW_STRAP_01",
+          "description": "PVC STRAP COMPOUND",
+          "quantity": "1",
+          "unit": "PAA",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
+    "actionId": "act_1790660578416_e013670f_bom_1_C1HL0003C_alt2",
+    "timestamp": "2026-09-29T05:42:58.421Z"
+  },
+  {
+    "logId": "audit_1790660578427_a7179c11",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -266,7 +537,7 @@
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Copy BOM from Material EXISTING_MAT Plant 1001 Usage 1 → to Material EXISTING_MAT Plant 1012 Usage 1",
-    "actionId": "act_1790656302738_bdfd872a_bom_0_EXISTING_MAT_alt2",
-    "timestamp": "2026-09-29T04:31:42.740Z"
+    "actionId": "act_1790660578425_8d1a2b74_bom_0_EXISTING_MAT_alt2",
+    "timestamp": "2026-09-29T05:42:58.427Z"
   }
 ]

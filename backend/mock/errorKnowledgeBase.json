@@ -6,9 +6,9 @@
     "recommendedAction": "RETRY",
     "riskLevel": 2,
     "description": "Transient database connectivity timeout or lock contention. Safe to retry after connection stabilizes.",
-    "occurrenceCount": 308,
-    "successfulResolutionCount": 234,
-    "lastSeen": "2026-09-29T04:31:39.527Z"
+    "occurrenceCount": 324,
+    "successfulResolutionCount": 246,
+    "lastSeen": "2026-09-29T05:42:55.469Z"
   },
   {
     "id": "KB_002",
@@ -39,9 +39,9 @@
     "recommendedAction": "RETRY",
     "riskLevel": 2,
     "description": "Transient network disconnection or gateway timeout during transmission. Safe to reprocess/retry after connectivity is restored.",
-    "occurrenceCount": 243,
-    "successfulResolutionCount": 171,
-    "lastSeen": "2026-09-29T04:31:38.083Z"
+    "occurrenceCount": 255,
+    "successfulResolutionCount": 179,
+    "lastSeen": "2026-09-29T05:42:54.367Z"
   },
   {
     "id": "KB_005",
