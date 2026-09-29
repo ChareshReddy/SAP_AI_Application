@@ -21,7 +21,8 @@ const testFiles = [
   'test/bomStructuralPreservation.test.js',
   'test/bomDiscrepancyFixes.test.js',
   'test/crossPlantAlternativeFix.test.js',
-  'test/vbsSyntaxValidation.test.js'
+  'test/vbsSyntaxValidation.test.js',
+  'test/materialCheck.test.js'
 ];
 
 const env = {
