@@ -37,6 +37,7 @@ import {
   getSelectedSapUser,
   getSelectedSapSessionId
 } from '../services/sapGuiClient.js';
+import { checkMaterialMaintenance } from '../services/materialCheck.js';
 import {
   ENTITY_REGISTRY,
   getEntitySchema,
@@ -753,6 +754,37 @@ export const TOOLS = [
         required: ['businessPartnerId']
       }
     }
+  },
+  // Material Maintenance Check (MARC / Plant verification)
+  {
+    type: 'function',
+    function: {
+      name: 'check_material_maintenance',
+      description: 'Checks whether materials are extended and maintained in a specific SAP plant in MARC/MARA. Call this whenever the user asks to check, verify, test, or display material maintenance or MARC table for any material(s) or BOM components in a plant (e.g. "check sg21 in plant 1000", "sg22 from 1000", "check material in plant", "display marc table for SG21 plant 1000"). Returns maintenance status (OK, NOT_EXTENDED, NOT_FOUND, DELETION_FLAG, BLOCKED, UNKNOWN) for each material.',
+      parameters: {
+        type: 'object',
+        properties: {
+          materials: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of material numbers/identifiers to check for plant maintenance (e.g. ["SG21", "SG22", "A1BH0214C"]).'
+          },
+          bomMaterial: {
+            type: 'string',
+            description: 'Optional parent/BOM material whose components should be expanded and checked.'
+          },
+          plant: {
+            type: 'string',
+            description: 'Target SAP plant code (e.g. 1000, 1001, 1012).'
+          },
+          bomUsage: {
+            type: 'string',
+            description: 'Optional BOM usage if expanding a BOM (default: 1).'
+          }
+        },
+        required: ['plant']
+      }
+    }
   }
 ];
 
@@ -800,7 +832,14 @@ INTENT CLASSIFICATION & TOOL CALLING RULES (CRITICAL):
      --> Call 'get_entity_data' immediately for that entity with no filters (using an empty filters array [] or omitting filters), returning default/paginated results.
      --> Do NOT reject the short response and do NOT ask again.
 
-4. EDGE CASE / AMBIGUITY FALLBACK FOR READS:
+4. MATERIAL MAINTENANCE & MARC CHECK (check_material_maintenance):
+   - Whenever the user asks to check, verify, test, or display material maintenance or table MARC for material(s) in a plant (e.g., "check sg21 in plant 1000", "sg22 from 1000", "material-sg21, plant -1000, BOM-1, now check this in marc table", "check maintenance for A1BH0214C in 1001", "display marc table"):
+     --> Call 'check_material_maintenance' DIRECTLY.
+     --> Extract the material identifier(s) (e.g. "SG21", "SG22", "MATERIAL-SG21", "A1BH0214C") into 'materials': ["SG21"] and the plant code (e.g. "1000") into 'plant': "1000".
+     --> If the user mentions a BOM material to expand (e.g. "expand BOM A1BH0214C in 1001"), pass 'bomMaterial': "A1BH0214C" and 'plant': "1001".
+     --> Treat any term (such as SG21, SG22, MAT-01, 11021735, RAW_EVA_01) as a material number to check. Do NOT refuse or lecture the user by assuming it is an SAP view name or menu item; immediately execute 'check_material_maintenance'.
+
+5. EDGE CASE / AMBIGUITY FALLBACK FOR READS:
    - If you genuinely must perform a read first (e.g. because the record's identity was ambiguous or missing and the user requested a change):
      --> Your accompanying reply text must NOT just silently show data.
      --> You MUST ask an explicit question connecting the found record to the user's intended change, e.g.:
@@ -903,6 +942,17 @@ SAP AI OPERATIONS AGENT - INTERFACE MONITORING (CPI/AIF/SFTP):
    - RECOVERABLE ERRORS (Risk Level <= 2, RETRY recommended): Gateway timeout HTTP 504, SFTP transient connection drops, Kafka broker timeout. Propose retrigger with 'propose_retrigger_interface'.
    - NON-RECOVERABLE ERRORS (Risk Level 3+, ESCALATE recommended): SSL/TLS certificate expired, payload schema validation failed (missing tax jurisdiction, bad XML). NEVER call 'propose_retrigger_interface'! Explain root cause and escalate to Basis / Integration / Dev team.
    - STATUS SYNONYMS: 'failed', 'error', 'errored' mean status = 'FAILED'. 'succeeded', 'successful', 'healthy', 'completed' mean 'SUCCESS'. 'pending', 'running' mean 'PENDING'.
+
+===================================================================
+SAP AI OPERATIONS AGENT - MATERIAL MAINTENANCE & MARC CHECK:
+===================================================================
+1. OPERATIONS TOOLS:
+   - 'check_material_maintenance': Checks whether materials are extended and maintained in a specific plant by reading table MARC (and MARA when unextended).
+2. USAGE RULES:
+   - When the user asks to check, inspect, verify, or display MARC table or material maintenance in a plant (e.g. "sg22 from 1000", "check sg21 in plant 1000", "material-sg21, plant -1000, BOM-1, now check this in marc table", "check material in plant"):
+     --> Call 'check_material_maintenance' immediately.
+     --> Extract materials: e.g. ["SG21"] or ["SG22"] and plant: e.g. "1000".
+     --> Do NOT lecture or refuse the user by guessing about SAP purchasing/sales view codes (e.g., SG21, SG22). Always treat any material reference as a material ID to check.
 
 OUTPUT INSTRUCTIONS:
 - Give a SHORT natural-language reply only (1-2 sentences max).
@@ -1688,6 +1738,66 @@ router.post('/', async (req, res) => {
       error: false
     });
   }
+});
+
+/**
+ * Detects material check intent directly from user prompt text.
+ * Handles inputs like:
+ * - "sg22 from 1000"
+ * - "check sg21 in plant 1000"
+ * - "material-sg21, plant -1000, BOM-1, now check this in marc table"
+ * - "check A1BH0214C in 1001"
+ * - "display marc table for material SG21 in plant 1000"
+ */
+export function detectMaterialCheckIntent(userPrompt) {
+  if (!userPrompt || typeof userPrompt !== 'string') return null;
+  const prompt = userPrompt.trim();
+
+  // Extract plant: "plant 1000", "plant -1000", "plant: 1000", "in 1000", "from 1000"
+  const plantMatch =
+    prompt.match(/\bplant\s*[:=\-]?\s*([0-9]{3,4})\b/i) ||
+    prompt.match(/\b(?:from|in|for)\s+plant\s*([0-9]{3,4})\b/i) ||
+    prompt.match(/\b(?:from|in|for)\s+([0-9]{3,4})\b/i);
+
+  if (!plantMatch) return null;
+  const plant = plantMatch[1];
+
+  // 1. Explicit material label: "material-sg21", "material: sg21", "material sg21", "materials: a, b"
+  const matLabelMatch = prompt.match(/\bmaterials?\s*[:=\-]?\s*([A-Za-z0-9_\-\.\/,\s]+?)(?:,?\s*\b(?:plant|bom|in|from|usage|now)\b|$)/i);
+  if (matLabelMatch) {
+    const rawList = matLabelMatch[1]
+      .split(/[\s,]+/)
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => s && s !== 'BOM' && s !== 'PLANT' && s !== 'MARC' && s !== 'TABLE' && s !== 'NOW' && s !== 'CHECK');
+    if (rawList.length > 0) {
+      return { materials: rawList, plant };
+    }
+  }
+
+  // 2. Action + Material: "check SG21 in plant 1000", "inspect SG22 from 1000", "display marc table for SG21"
+  const checkActionMatch = prompt.match(/\b(?:check|inspect|verify|display|test|find)\s+(?:marc\s+(?:table\s+)?(?:for\s+)?)?([A-Za-z0-9_\-\.\/]+)\s+(?:in|from|for)\s+(?:plant\s*)?[0-9]{3,4}\b/i);
+  if (checkActionMatch) {
+    const m = checkActionMatch[1].trim().toUpperCase();
+    if (m !== 'MARC' && m !== 'TABLE' && m !== 'MATERIAL' && m !== 'BOM') {
+      return { materials: [m], plant };
+    }
+  }
+
+  // 3. Short prompt: "SG22 from 1000" or "SG22 in 1000"
+  const shortMatch = prompt.match(/^([A-Za-z0-9_\-\.\/]+)\s+(?:from|in|for)\s+(?:plant\s*)?[0-9]{3,4}\b/i);
+  if (shortMatch) {
+    const m = shortMatch[1].trim().toUpperCase();
+    if (!['CHECK', 'SHOW', 'LIST', 'BOM', 'MARC', 'TABLE', 'CREATE', 'DELETE', 'UPDATE'].includes(m)) {
+      return { materials: [m], plant };
+    }
+  }
+
+  return null;
+}
+
+router.post('/', async (req, res) => {
+  const { message, history } = req.body || {};
+  let activeEntitySchema = null;
 
   if (!message || typeof message !== 'string' || !message.trim()) {
     return res.status(400).json({
@@ -1824,11 +1934,29 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // Intercept material check if model failed to call structured tools
+    if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+      const matCheckIntent = detectMaterialCheckIntent(message);
+      if (matCheckIntent) {
+        assistantMessage.tool_calls = [
+          {
+            id: 'call_mat_' + Date.now(),
+            type: 'function',
+            function: {
+              name: 'check_material_maintenance',
+              arguments: JSON.stringify(matCheckIntent)
+            }
+          }
+        ];
+      }
+    }
+
     if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
       const credentials = getSessionCredentials(req);
       const username = getSessionUsername(req);
       let combinedRecords = [];
       let pendingActionToReturn = null;
+      let materialCheckResults = null;
       activeEntitySchema = activeEntitySchema || getEntitySchema(resolveEntityKey(null, message));
       const toolMessages = [...messages, assistantMessage];
 
@@ -3779,6 +3907,40 @@ router.post('/', async (req, res) => {
             })
           });
         }
+
+        // TOOL: check_material_maintenance (Read-Only)
+        else if (fnName === 'check_material_maintenance') {
+          const plant = toolArgs?.plant;
+          let matList = Array.isArray(toolArgs?.materials)
+            ? toolArgs.materials
+            : (toolArgs?.materials ? [toolArgs.materials] : (toolArgs?.material ? [toolArgs.material] : []));
+          const bomMat = toolArgs?.bomMaterial;
+          const bomUsage = toolArgs?.bomUsage || '1';
+
+          if (bomMat && matList.length === 0) {
+            try {
+              const bomRes = await verifyBomInCs03({
+                material: bomMat,
+                plant: String(plant || '').trim(),
+                bomUsage: String(bomUsage).trim()
+              });
+              const comps = bomRes.components || [];
+              matList = [bomMat, ...comps.map((c) => c.material || c.component).filter(Boolean)];
+            } catch {
+              matList = [bomMat];
+            }
+          }
+
+          const resData = await checkMaterialMaintenance(matList, plant);
+          materialCheckResults = resData;
+
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: fnName,
+            content: JSON.stringify(resData)
+          });
+        }
       }
 
       // Default fallback message if OpenRouter Call #2 fails
@@ -3805,6 +3967,18 @@ router.post('/', async (req, res) => {
         } else {
           finalReply = `I've prepared an update proposal for ${entLabel} ${recId}. Please review the proposed changes and confirm below.`;
         }
+      } else if (materialCheckResults) {
+        const rows = materialCheckResults.results || [];
+        const lines = rows.map((r) => {
+          let badge = '🟢';
+          if (r.status === 'NOT_EXTENDED') badge = '🟡';
+          else if (r.status === 'DELETION_FLAG') badge = '🔴';
+          else if (r.status === 'BLOCKED') badge = '⛔';
+          else if (r.status === 'NOT_FOUND') badge = '⚪';
+          else if (r.status === 'UNKNOWN') badge = '⚠️';
+          return `${badge} **${r.material}** in Plant **${r.plant}**: \`${r.status}\` — ${r.reason}`;
+        });
+        finalReply = `**Material Maintenance Check (MARC Table) for Plant ${materialCheckResults.plant}:**\n\n${lines.join('\n')}\n\n*Summary: ${materialCheckResults.summary.total} checked (${materialCheckResults.summary.OK} OK, ${materialCheckResults.summary.NOT_EXTENDED} not extended, ${materialCheckResults.summary.BLOCKED} blocked, ${materialCheckResults.summary.DELETION_FLAG} deletion flag, ${materialCheckResults.summary.NOT_FOUND} not found).*`;
       } else if (combinedRecords.length > 0) {
         const entLabel = activeEntitySchema?.singularLabel || 'record';
         finalReply = `Here's what I found (${combinedRecords.length} ${entLabel}${combinedRecords.length === 1 ? '' : 's'}):`;

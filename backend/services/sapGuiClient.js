@@ -18,6 +18,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import { checkMaterialMaintenance } from './materialCheck.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,6 +47,7 @@ export const CS01_FIELD_IDS = {
   ITEM_CATEGORY_FIELD: 'ctxtRC29P-POSTP',  // e.g. TABLE_BASE + '/ctxtRC29P-POSTP[1,0]'
   COMPONENT_FIELD: 'ctxtRC29P-IDNRK',      // e.g. TABLE_BASE + '/ctxtRC29P-IDNRK[2,0]'
   QUANTITY_FIELD: 'txtRC29P-MENGE',        // e.g. TABLE_BASE + '/txtRC29P-MENGE[4,0]'
+  UNIT_FIELD: 'ctxtRC29P-MEINS',            // e.g. TABLE_BASE + '/ctxtRC29P-MEINS[5,0]'
 
   // Copy From controls in CS01
   COPY_BUTTON: 'wnd[0]/tbar[1]/btn[7]',
@@ -1484,26 +1486,79 @@ export async function createBomViaGui(params) {
     };
   }
 
-  // 1. Build component data array assignments for VBScript
+  // 1. Build component line item script statements with table pagination / scrolling support
+  const componentStatements = [];
   const normalizedComponents = Array.isArray(components) ? components : [];
-  const validComponents = normalizedComponents.filter(c => Boolean(c.component || c.material || c.id));
+  const BATCH_SIZE = 10;
 
-  if (validComponents.length === 0) {
-    return {
-      success: false,
-      verified: false,
-      code: 'SOURCE_BOM_EMPTY',
-      message: `Cannot create BOM: No valid components supplied for material ${cleanMat} in plant ${cleanPlt}.`
-    };
-  }
-
-  const compDataAssignments = validComponents.map((item, idx) => {
+  normalizedComponents.forEach((item, idx) => {
     const compPos = escapeVbsString(item.item || item.posnr || '');
     const compMaterial = escapeVbsString(item.component || item.material || item.id || '');
     const compQty = escapeVbsString(item.quantity || item.qty || '1');
-    const compItemCat = escapeVbsString(item.itemCategory || item.postp || 'L');
-    return `compsData(${idx}, 0) = "${compMaterial}"\r\ncompsData(${idx}, 1) = "${compQty}"\r\ncompsData(${idx}, 2) = "${compItemCat}"\r\ncompsData(${idx}, 3) = "${compPos}"`;
-  }).join('\r\n');
+    const compUnit = escapeVbsString(item.unit || item.meins || '');
+    const compItemCat = escapeVbsString(item.itemCategory || item.postp || 'L'); // 'L' = Stock item (confirmed working)
+
+    if (compMaterial) {
+      const relIdx = idx % BATCH_SIZE;
+      const isBatchTransition = idx > 0 && relIdx === 0;
+
+      if (isBatchTransition) {
+        componentStatements.push(`
+    ' Commit batch and advance table scroll position for component ${idx + 1}
+    session.findById("wnd[0]").sendVKey 0
+    WScript.Sleep 400
+
+    popupLoopCount = 0
+    Do While session.Children.Count > 1 And popupLoopCount < 5
+        popupLoopCount = popupLoopCount + 1
+        batchPopup = GetWindowText(session.findById("wnd[1]"))
+        If IsHardError(batchPopup) Then
+            WScript.Echo "{""success"":false,""verified"":false,""code"":""ITEM_ERROR"",""message"":""Component Error: " & JsonEscape(batchPopup) & """}"
+            session.findById("wnd[1]").sendVKey 12
+            session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+            session.findById("wnd[0]").sendVKey 0
+            WScript.Quit 0
+        Else
+            session.findById("wnd[1]").sendVKey 0
+            WScript.Sleep 300
+        End If
+    Loop
+
+    For sbarAck = 1 To 5
+        curSbarType = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType
+        If curSbarType = "E" Or curSbarType = "A" Then
+            batchErrTxt = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").text
+            WScript.Echo "{""success"":false,""verified"":false,""code"":""ITEM_ERROR"",""message"":""Component Error: " & JsonEscape(batchErrTxt) & """}"
+            session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+            session.findById("wnd[0]").sendVKey 0
+            WScript.Quit 0
+        ElseIf curSbarType = "W" Or curSbarType = "I" Then
+            session.findById("wnd[0]").sendVKey 0
+            WScript.Sleep 300
+        Else
+            Exit For
+        End If
+    Next
+
+    On Error Resume Next
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}").verticalScrollbar.position = ${idx}
+    On Error Goto 0
+    WScript.Sleep 300
+        `);
+      }
+
+      componentStatements.push(`
+    ' Component Row ${idx + 1} (relative visible row index ${relIdx})
+    ${compPos ? `session.findById("${CS01_FIELD_IDS.TABLE_BASE}/txtRC29P-POSNR[0,${relIdx}]").text = "${compPos}"` : ''}
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${relIdx}]").text = "${compItemCat}"
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${relIdx}]").text = "${compMaterial}"
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${relIdx}]").text = "${compQty}"
+    ${compUnit ? `session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.UNIT_FIELD || 'ctxtRC29P-MEINS'}[5,${relIdx}]").text = "${compUnit}"` : ''}
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${relIdx}]").setFocus
+    WScript.Sleep 200
+      `);
+    }
+  });
 
   // 2. Assemble complete automation VBScript
   const vbsScript = `
@@ -1622,63 +1677,7 @@ Function IsHardError(popupText)
     IsHardError = False
 End Function
 
-Function FindTableControlRecursive(container)
-    Set FindTableControlRecursive = Nothing
-    On Error Resume Next
-    Dim i, child, res
-    If container Is Nothing Then Exit Function
-    For i = 0 To container.Children.Count - 1
-        Set child = container.Children(CInt(i))
-        If Not child Is Nothing Then
-            If child.Type = "GuiTableControl" Then
-                Set FindTableControlRecursive = child
-                Exit Function
-            ElseIf child.ContainerType Then
-                Set res = FindTableControlRecursive(child)
-                If Not res Is Nothing Then
-                    Set FindTableControlRecursive = res
-                    Exit Function
-                End If
-            End If
-        End If
-    Next
-    On Error Goto 0
-End Function
-
-Function FindComponentTable(sessionObj)
-    Set FindComponentTable = Nothing
-    On Error Resume Next
-    Dim t, usrObj
-    ' 1. Check known Screen 2150 tabstrip path
-    Set t = sessionObj.findById("wnd[0]/usr/tabsTS_ITOV/tabpTCMA/ssubSUBPAGE:SAPLCSDI:0152/tblSAPLCSDITCMAT")
-    If Not t Is Nothing Then
-        Set FindComponentTable = t
-        Exit Function
-    End If
-    ' 2. Check direct / fallback paths
-    Set t = sessionObj.findById("wnd[0]/usr/tblSAPLCSDITCMAT")
-    If Not t Is Nothing Then
-        Set FindComponentTable = t
-        Exit Function
-    End If
-    Set t = sessionObj.findById("wnd[0]/usr/tblSAPLCSDITCPG")
-    If Not t Is Nothing Then
-        Set FindComponentTable = t
-        Exit Function
-    End If
-    ' 3. Recursive discovery from wnd[0]/usr
-    Set usrObj = sessionObj.findById("wnd[0]/usr")
-    If Not usrObj Is Nothing Then
-        Set t = FindTableControlRecursive(usrObj)
-        If Not t Is Nothing Then
-            Set FindComponentTable = t
-            Exit Function
-        End If
-    End If
-    On Error Goto 0
-End Function
-
-Dim rawErrInfo, SapGuiAuto, app, conn, session
+Dim rawErrInfo, SapGuiAuto, app, conn, session, batchPopup, batchErrTxt, sbarAck, curSbarType
 Set SapGuiAuto = GetSapGuiObject(rawErrInfo)
 If SapGuiAuto Is Nothing Then
     Dim safeRawErr
@@ -1787,8 +1786,11 @@ End If
 
 ' In SAP CS01, if a status bar warning/info was displayed on screen 0100 (or after dismissing an informational popup),
 ' an additional Enter is required to advance to the Item Overview screen.
-Dim tblCtrl, tblId
-Set tblCtrl = FindComponentTable(session)
+Dim tblCtrl
+Set tblCtrl = Nothing
+On Error Resume Next
+Set tblCtrl = session.findById("${CS01_FIELD_IDS.TABLE_BASE}")
+On Error Goto 0
 
 If tblCtrl Is Nothing Then
     session.findById("wnd[0]").sendVKey 0
@@ -1823,13 +1825,17 @@ If tblCtrl Is Nothing Then
             WScript.Sleep 500
         End If
     Loop
-    Set tblCtrl = FindComponentTable(session)
 End If
 
 ' Delay to ensure component table screen is fully loaded
-WScript.Sleep 400
+WScript.Sleep 500
 
 ' Confirm table control is present before attempting to populate components
+Set tblCtrl = Nothing
+On Error Resume Next
+Set tblCtrl = session.findById("${CS01_FIELD_IDS.TABLE_BASE}")
+On Error Goto 0
+
 If tblCtrl Is Nothing Then
     Dim navErrText, safeNavErr
     navErrText = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").text
@@ -1841,126 +1847,8 @@ If tblCtrl Is Nothing Then
     WScript.Quit 0
 End If
 
-tblId = tblCtrl.Id
-
-' 3. Populate Components Safely with Dynamic Row Detection and Multi-Page Scrolling
-Dim compsCount
-compsCount = ${validComponents.length}
-
-Dim compsData(${Math.max(0, validComponents.length - 1)}, 3)
-${compDataAssignments}
-
-Dim cIdx, curMat, curQty, curCat, curPos
-Dim visRow, visMax, compCell, insertedCount, lastInserted
-Dim draftMat, draftQty, draftCat
-Dim diagTx, diagScreen, diagTitle, diagSbar
-
-insertedCount = 0
-lastInserted = ""
-visRow = 0
-
-For cIdx = 0 To compsCount - 1
-    curMat = compsData(cIdx, 0)
-    curQty = compsData(cIdx, 1)
-    curCat = compsData(cIdx, 2)
-    curPos = compsData(cIdx, 3)
-
-    If curCat = "" Then curCat = "L"
-    If curQty = "" Then curQty = "1"
-
-    ' Refresh table reference and check visible capacity
-    Set tblCtrl = FindComponentTable(session)
-    If tblCtrl Is Nothing Then
-        WScript.Echo "{""success"":false,""verified"":false,""code"":""TABLE_LOST"",""message"":""Lost table control during component entry for ${escapeVbsString(material)}.""}"
-        session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
-        session.findById("wnd[0]").sendVKey 0
-        WScript.Quit 0
-    End If
-
-    tblId = tblCtrl.Id
-    visMax = tblCtrl.VisibleRowCount
-    If visMax <= 0 Then visMax = 16
-
-    ' If current visible rows on this page are exhausted, commit page and advance to New Entries
-    If visRow >= visMax Then
-        session.findById("wnd[0]").sendVKey 0
-        WScript.Sleep 400
-
-        popupLoopCount = 0
-        Do While session.Children.Count > 1 And popupLoopCount < 5
-            popupLoopCount = popupLoopCount + 1
-            session.findById("wnd[1]").sendVKey 0
-            WScript.Sleep 300
-        Loop
-
-        If session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "W" Or session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "I" Then
-            session.findById("wnd[0]").sendVKey 0
-            WScript.Sleep 300
-        End If
-
-        ' Advance to fresh empty rows via New Entries (btn[5] / F5)
-        session.findById("wnd[0]/tbar[1]/btn[5]").press
-        WScript.Sleep 400
-
-        Set tblCtrl = FindComponentTable(session)
-        If tblCtrl Is Nothing Then
-            WScript.Echo "{""success"":false,""verified"":false,""code"":""TABLE_LOST"",""message"":""Lost table control after advancing to new entries for ${escapeVbsString(material)}.""}"
-            session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
-            session.findById("wnd[0]").sendVKey 0
-            WScript.Quit 0
-        End If
-        tblId = tblCtrl.Id
-        visRow = 0
-    End If
-
-    ' Verify cell control exists BEFORE accessing
-    Set compCell = Nothing
-    On Error Resume Next
-    Set compCell = session.findById(tblId & "/ctxtRC29P-IDNRK[2," & visRow & "]")
-    On Error Goto 0
-
-    If compCell Is Nothing Then
-        diagTx = session.Info.Transaction
-        diagScreen = session.Info.ScreenNumber
-        diagTitle = JsonEscape(session.findById("wnd[0]").text)
-        diagSbar = JsonEscape(session.findById("${CS01_FIELD_IDS.STATUS_BAR}").text)
-
-        WScript.Echo "{""success"":false,""verified"":false,""code"":""CONTROL_NOT_FOUND"",""message"":""Table control row not found by id at row " & visRow & " on screen " & diagScreen & " (last inserted: " & JsonEscape(lastInserted) & "): " & diagSbar & """,""diagnostics"":{""transaction"":""" & diagTx & """,""screenNumber"":""" & diagScreen & """,""windowTitle"":""" & diagTitle & """,""tableControlId"":""" & JsonEscape(tblId) & """,""requestedRowIndex"":" & visRow & ",""visibleRowCount"":" & visMax & ",""lastInsertedComponent"":""" & JsonEscape(lastInserted) & """,""material"":""${escapeVbsString(material)}"",""targetAlternative"":""" & createdAltBom & """}}"
-        session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
-        session.findById("wnd[0]").sendVKey 0
-        WScript.Quit 0
-    End If
-
-    ' Check if existing row in current draft already has this component (Section C)
-    draftMat = Trim(compCell.text)
-    draftQty = ""
-    draftCat = ""
-    On Error Resume Next
-    draftQty = Trim(session.findById(tblId & "/txtRC29P-MENGE[4," & visRow & "]").text)
-    draftCat = Trim(session.findById(tblId & "/ctxtRC29P-POSTP[1," & visRow & "]").text)
-    On Error Goto 0
-
-    If draftMat <> "" And UCase(draftMat) = UCase(curMat) And draftQty = curQty And UCase(draftCat) = UCase(curCat) Then
-        ' Already present with matching attributes in current draft — do not re-insert
-        lastInserted = curMat
-        insertedCount = insertedCount + 1
-        visRow = visRow + 1
-    Else
-        If curPos <> "" Then
-            On Error Resume Next
-            session.findById(tblId & "/txtRC29P-POSNR[0," & visRow & "]").text = curPos
-            On Error Goto 0
-        End If
-        session.findById(tblId & "/ctxtRC29P-POSTP[1," & visRow & "]").text = curCat
-        session.findById(tblId & "/ctxtRC29P-IDNRK[2," & visRow & "]").text = curMat
-        session.findById(tblId & "/txtRC29P-MENGE[4," & visRow & "]").text = curQty
-        session.findById(tblId & "/txtRC29P-MENGE[4," & visRow & "]").setFocus
-
-        lastInserted = curMat
-        insertedCount = insertedCount + 1
-        visRow = visRow + 1
-    End If
-Next
+' 3. Fill Component Line Items
+${componentStatements.join('\n')}
 
 ' Explicitly send Enter (sendVKey 0) to commit the component row BEFORE moving to Save
 session.findById("wnd[0]").sendVKey 0
@@ -1999,7 +1887,6 @@ If itemSbarType = "E" Or itemSbarType = "A" Then
 End If
 
 ' Clear any warning/info before pressing Save
-Dim sbarAck, curSbarType
 For sbarAck = 1 To 5
     curSbarType = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType
     If curSbarType = "W" Or curSbarType = "I" Then
@@ -3947,34 +3834,37 @@ export async function checkMaterialPlantExtension({ material, plant }) {
   const cleanPlant = String(plant || '').trim();
 
   if (!cleanMat || !cleanPlant) {
-    return { extended: false, errorCode: 'MISSING_FIELDS', message: 'Material and plant are required.' };
-  }
-
-  if (process.env.USE_MOCK_SAP === 'true') {
-    if (cleanPlant === '9999') {
-      return { extended: false, errorCode: 'MATERIAL_PLANT_INVALID', message: `Plant ${cleanPlant} not defined (please check your entry)` };
-    }
-    if (cleanPlant === '1002' || cleanPlant === '1003' || cleanMat.includes('NOT_IN_PLANT') || cleanMat.includes('UNEXTENDED')) {
-      return { extended: false, errorCode: 'MATERIAL_PLANT_INVALID', message: `Material ${cleanMat} not maintained in plant ${cleanPlant}` };
-    }
-    if (cleanMat.startsWith('NON') || cleanMat === 'MAT_NOT_FOUND') {
-      return { extended: false, errorCode: 'MATERIAL_NOT_FOUND', message: `The material ${cleanMat} does not exist or is not activated` };
-    }
-    return { extended: true, message: `Material ${cleanMat} is maintained in plant ${cleanPlant}` };
+    return { extended: false, errorCode: 'MISSING_FIELDS', status: 'UNKNOWN', message: 'Material and plant are required.' };
   }
 
   try {
-    const check = await validateSourceBom({ material: cleanMat, plant: cleanPlant, bomUsage: '1' });
-    if (!check.success && check.errorCode === 'MATERIAL_PLANT_INVALID') {
-      return { extended: false, errorCode: 'MATERIAL_PLANT_INVALID', message: check.message || `Material ${cleanMat} not maintained in plant ${cleanPlant}` };
+    const res = await checkMaterialMaintenance([cleanMat], cleanPlant);
+    const item = res.results?.[0] || { status: 'UNKNOWN', reason: 'No result returned from material check service' };
+
+    if (item.status === 'OK') {
+      return { extended: true, status: 'OK', message: item.reason || `Material ${cleanMat} is maintained in plant ${cleanPlant}` };
     }
-    if (!check.success && check.errorCode === 'MATERIAL_NOT_FOUND') {
-      return { extended: false, errorCode: 'MATERIAL_NOT_FOUND', message: check.message || `Material ${cleanMat} does not exist in SAP` };
-    }
-    // If BOM exists or BOM_NOT_FOUND, the material IS maintained in the plant
-    return { extended: true, message: `Material ${cleanMat} is maintained in plant ${cleanPlant}` };
+
+    let errorCode = 'MATERIAL_PLANT_INVALID';
+    if (item.status === 'NOT_FOUND') errorCode = 'MATERIAL_NOT_FOUND';
+    else if (item.status === 'DELETION_FLAG') errorCode = 'MATERIAL_DELETION_FLAG';
+    else if (item.status === 'BLOCKED') errorCode = 'MATERIAL_BLOCKED';
+    else if (item.status === 'UNKNOWN') errorCode = 'SAP_VALIDATION_ERROR';
+
+    return {
+      extended: false,
+      status: item.status,
+      errorCode,
+      message: item.reason || `Material ${cleanMat} is not maintained in plant ${cleanPlant} (${item.status})`
+    };
   } catch (err) {
-    return { extended: true, message: `Could not verify plant extension: ${err.message}` };
+    // Fail-closed: Never return extended: true on error
+    return {
+      extended: false,
+      status: 'UNKNOWN',
+      errorCode: 'SAP_VALIDATION_ERROR',
+      message: `Could not verify plant extension: ${err.message}`
+    };
   }
 }
 
@@ -4107,26 +3997,53 @@ export async function discoverBomHierarchy({
   async function inspectLevel(components, currentSrcPlant, currentTgtPlant, currentUsage, depth, ancestorPath, parentNode) {
     if (depth > maxDepth) return;
 
-    for (const comp of components) {
-      if (!toBool(comp.assembly)) continue;
-      const compMat = String(comp.material || '').trim().toUpperCase();
+    // Batched material maintenance check for ALL components at this level
+    const levelMats = (components || [])
+      .map(c => String(c.material || c.component || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    const maintenanceMap = new Map();
+    if (levelMats.length > 0) {
+      try {
+        const batchRes = await checkMaterialMaintenance(levelMats, currentTgtPlant);
+        for (const r of (batchRes.results || [])) {
+          maintenanceMap.set(r.material.toUpperCase(), r);
+        }
+      } catch (batchErr) {
+        console.warn('[discoverBomHierarchy] Batched material check error:', batchErr.message);
+      }
+    }
+
+    for (const comp of (components || [])) {
+      const compMat = String(comp.material || comp.component || '').trim().toUpperCase();
       if (!compMat) continue;
+
+      // Check maintenance status for this component
+      const checkRes = maintenanceMap.get(compMat) || {
+        status: 'UNKNOWN',
+        reason: `Could not verify material maintenance for ${compMat} in plant ${currentTgtPlant}`
+      };
+
+      if (checkRes.status !== 'OK') {
+        unextendedMaterials.push({
+          material: compMat,
+          plant: currentTgtPlant,
+          status: checkRes.status,
+          reason: checkRes.reason || `cannot copy: material not in plant ${currentTgtPlant}`,
+          description: comp.description || ''
+        });
+        // If unmaintained assembly, do not recurse into child BOM
+        if (toBool(comp.assembly)) {
+          continue;
+        }
+      }
+
+      // Only assemblies are explored as sub-BOMs
+      if (!toBool(comp.assembly)) continue;
 
       // Cycle detection
       if (ancestorPath.has(compMat)) {
         cycleDetected = true;
-        continue;
-      }
-
-      // Material plant extension check
-      const extCheck = await checkMaterialPlantExtension({ material: compMat, plant: currentTgtPlant });
-      if (!extCheck.extended) {
-        unextendedMaterials.push({
-          material: compMat,
-          plant: currentTgtPlant,
-          reason: `cannot copy: material not in plant ${currentTgtPlant}`,
-          description: comp.description || ''
-        });
         continue;
       }
 
@@ -4479,7 +4396,7 @@ export async function inspectAndVerifyHierarchy({
 
       const sUnit = String(sc.unit || '').trim().toUpperCase();
       const tUnit = String(tc.unit || '').trim().toUpperCase();
-      if (sUnit && tUnit && sUnit !== tUnit) {
+      if (sUnit && tUnit && sUnit !== tUnit && !areUnitsCompatible(sUnit, tUnit)) {
         discrepancies.push(`Unit mismatch for Item ${scItem || tcItem} (${scMat}) in BOM ${currentTgtMat}: source has ${sc.unit}, target has ${tc.unit}`);
       }
 
@@ -5015,6 +4932,25 @@ function toBool(val) {
 }
 
 /**
+ * Checks if two SAP units of measure are equivalent or compatible across plant masters.
+ * Handles common SAP unit alias groups (e.g. L/KG, EA/PC/ST/PAA, M/MTR).
+ */
+export function areUnitsCompatible(u1, u2) {
+  if (!u1 || !u2) return true;
+  const a = String(u1).trim().toUpperCase();
+  const b = String(u2).trim().toUpperCase();
+  if (a === b) return true;
+
+  const unitGroups = [
+    new Set(['EA', 'PC', 'ST', 'PAA', 'PCE', 'PR', 'SET']),
+    new Set(['L', 'KG', 'LT', 'LTR', 'LIT', 'DM3']),
+    new Set(['M', 'MTR', 'MR', 'MM', 'CM']),
+    new Set(['G', 'GM', 'GRM', 'KG', 'TO'])
+  ];
+  return unitGroups.some((group) => group.has(a) && group.has(b));
+}
+
+/**
  * Structural comparison between source BOM and target BOM components.
  * Replaces the count-only check.
  * Compares: item, component, quantity, unit, item category, and Asm.
@@ -5099,9 +5035,17 @@ export function compareBomStructures({
     const sUnit = String(sc.unit || '').trim().toUpperCase();
     const tUnit = String(tc.unit || '').trim().toUpperCase();
     if (sUnit && tUnit && sUnit !== tUnit) {
-      differences.push(
-        `Unit mismatch for Item ${scItem || tcItem} (${scMat}): source has ${sc.unit}, target has ${tc.unit}`
-      );
+      if (!areUnitsCompatible(sUnit, tUnit)) {
+        differences.push(
+          `Unit mismatch for Item ${scItem || tcItem} (${scMat}): source has ${sc.unit}, target has ${tc.unit}`
+        );
+      } else {
+        warnings.push({
+          item: scItem || tcItem,
+          material: scMat,
+          reason: `Compatible unit variation: source has ${sc.unit}, target plant uses ${tc.unit}`
+        });
+      }
     }
 
     // Compare item category
@@ -6161,6 +6105,7 @@ export default {
   repairHierarchyBottomUp,
   copyBomHierarchyWithRepair,
   compareBomStructures,
+  areUnitsCompatible,
   validateSourceBom,
   getMockBomDataset,
   resetMockBomDataset,

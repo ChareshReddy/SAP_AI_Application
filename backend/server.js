@@ -13,6 +13,7 @@ import debugRoutes from './routes/debug.js';
 import knowledgeBaseRoutes from './routes/knowledgeBase.js';
 import bomRoutes from './routes/bom.js';
 import sapRoutes from './routes/sap.js';
+import materialCheckRoutes from './routes/materialCheck.js';
 import { enforceHttps, safeLogger } from './middleware/security.js';
 import { verifyAllToolsSafety } from './config/riskLevels.js';
 import { listSystems, DEFAULT_SYSTEM, getSystemConfig } from './config/systemRegistry.js';
@@ -54,6 +55,7 @@ app.use('/api/debug', debugRoutes);
 app.use('/api/knowledge-base', knowledgeBaseRoutes);
 app.use('/api/bom', bomRoutes);
 app.use('/api/sap', sapRoutes);
+app.use('/api/materials', materialCheckRoutes);
 
 // Multi-system discovery endpoint
 app.get('/api/systems', (req, res) => {
