@@ -1,6 +1,6 @@
 [
   {
-    "logId": "audit_1790599518627_c03e3ea0",
+    "logId": "audit_1790665371151_c3df80cc",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -177,14 +177,97 @@
           "reason": "Component C1BH0214C (Item 0020): Asm is unchecked in target plant (1012) because its sub-BOM does not exist in target plant."
         }
       ],
+      "executionPath": "NATIVE_COPY_FROM",
+      "isCrossPlantExistingBom": false,
       "status": "COPIED_WITH_WARNINGS_VIA_GUI"
     },
     "sourcePrompt": "Copy BOM from Material A1BH0214C Plant 1001 Usage 1 → to Material A1BH0214C Plant 1012 Usage 1",
-    "actionId": "act_1790599518625_9fe3d650_bom_0_A1BH0214C_alt1",
-    "timestamp": "2026-09-28T12:45:18.627Z"
+    "actionId": "act_1790665371150_79b7a902_bom_0_A1BH0214C_alt1",
+    "timestamp": "2026-09-29T07:02:51.151Z"
   },
   {
-    "logId": "audit_1790599518628_310ccf69",
+    "logId": "audit_1790665371153_dbe2af4c",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "B1BH0214C",
+    "businessPartnerId": "B1BH0214C",
+    "task": "Sub-BOM Copy (B1BH0214C)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom B1BH0214C",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "B1BH0214C",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "2",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "RAW_EVA_01",
+          "description": "EVA COMPOUND",
+          "quantity": "50",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0020",
+          "material": "RAW_CHEM_02",
+          "description": "BLOWING AGENT",
+          "quantity": "2",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0030",
+          "material": "RAW_PIG_03",
+          "description": "BLACK PIGMENT",
+          "quantity": "1",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0040",
+          "material": "RAW_ZINC_04",
+          "description": "ZINC OXIDE",
+          "quantity": "0.5",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0050",
+          "material": "RAW_STEAR_05",
+          "description": "STEARIC ACID",
+          "quantity": "0.5",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
+    "actionId": "act_1790665371150_79b7a902_bom_1_B1BH0214C_alt2",
+    "timestamp": "2026-09-29T07:02:51.153Z"
+  },
+  {
+    "logId": "audit_1790665371153_bbb9e914",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -220,14 +303,214 @@
         }
       ],
       "warnings": [],
+      "executionPath": "NATIVE_COPY_FROM",
+      "isCrossPlantExistingBom": false,
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
-    "actionId": "act_1790599518625_9fe3d650_bom_1_C1BH0214C_alt1",
-    "timestamp": "2026-09-28T12:45:18.628Z"
+    "actionId": "act_1790665371150_79b7a902_bom_1_C1BH0214C_alt1",
+    "timestamp": "2026-09-29T07:02:51.153Z"
   },
   {
-    "logId": "audit_1790599518635_07ff0980",
+    "logId": "audit_1790665371154_e7f9ea55",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "C2BH0214C",
+    "businessPartnerId": "C2BH0214C",
+    "task": "Sub-BOM Copy (C2BH0214C)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom C2BH0214C",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "C2BH0214C",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "2",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "RAW_RUBBER_01",
+          "description": "SYNTHETIC RUBBER",
+          "quantity": "10",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0020",
+          "material": "RAW_SULFUR_02",
+          "description": "SULFUR",
+          "quantity": "0.2",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0030",
+          "material": "RAW_ACCEL_03",
+          "description": "ACCELERATOR",
+          "quantity": "0.1",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0040",
+          "material": "RAW_OIL_04",
+          "description": "AROMATIC OIL",
+          "quantity": "0.5",
+          "unit": "KG",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 2) for main BOM A1BH0214C",
+    "actionId": "act_1790665371150_79b7a902_bom_2_C2BH0214C_alt2",
+    "timestamp": "2026-09-29T07:02:51.154Z"
+  },
+  {
+    "logId": "audit_1790665371155_cb028c66",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "PPBH0001C",
+    "businessPartnerId": "PPBH0001C",
+    "task": "Sub-BOM Copy (PPBH0001C)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom PPBH0001C",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "PPBH0001C",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "2",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "PKG_BOX_01",
+          "description": "INNER BOX",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0020",
+          "material": "PKG_POLY_02",
+          "description": "POLYBAG",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0030",
+          "material": "PKG_LBL_03",
+          "description": "SIZE LABEL",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0040",
+          "material": "PKG_HANGER_04",
+          "description": "PLASTIC HANGER",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        },
+        {
+          "item": "0050",
+          "material": "PKG_TAG_05",
+          "description": "PRICE TAG",
+          "quantity": "1",
+          "unit": "EA",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
+    "actionId": "act_1790665371150_79b7a902_bom_1_PPBH0001C_alt2",
+    "timestamp": "2026-09-29T07:02:51.155Z"
+  },
+  {
+    "logId": "audit_1790665371156_7bbb2fe3",
+    "sapUsername": "LEELAM_EXT",
+    "user": "LEELAM_EXT",
+    "system": "DEV",
+    "entityKey": "bom",
+    "actionType": "copy_bom",
+    "recordId": "C1HL0003C",
+    "businessPartnerId": "C1HL0003C",
+    "task": "Sub-BOM Copy (C1HL0003C)",
+    "reason": null,
+    "steps": [
+      "Initiated copy_bom action for bom C1HL0003C",
+      "Human confirmation verified",
+      "Executed copy_bom successfully"
+    ],
+    "result": "SUCCESS",
+    "ticketId": null,
+    "beforeValues": null,
+    "afterValues": {
+      "material": "C1HL0003C",
+      "plant": "1012",
+      "bomUsage": "1",
+      "alternativeBom": "2",
+      "validFrom": "",
+      "components": [
+        {
+          "item": "0010",
+          "material": "RAW_STRAP_01",
+          "description": "PVC STRAP COMPOUND",
+          "quantity": "1",
+          "unit": "PAA",
+          "itemCategory": "L",
+          "assembly": false
+        }
+      ],
+      "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
+      "status": "COPIED_AND_VERIFIED_VIA_GUI"
+    },
+    "sourcePrompt": "Hierarchy sub-BOM copy (depth 1) for main BOM A1BH0214C",
+    "actionId": "act_1790665371150_79b7a902_bom_1_C1HL0003C_alt2",
+    "timestamp": "2026-09-29T07:02:51.156Z"
+  },
+  {
+    "logId": "audit_1790665371161_74b0cd68",
     "sapUsername": "LEELAM_EXT",
     "user": "LEELAM_EXT",
     "system": "DEV",
@@ -263,10 +546,12 @@
         }
       ],
       "warnings": [],
+      "executionPath": "CROSS_PLANT_DIRECT_ENTRY",
+      "isCrossPlantExistingBom": true,
       "status": "COPIED_AND_VERIFIED_VIA_GUI"
     },
     "sourcePrompt": "Copy BOM from Material EXISTING_MAT Plant 1001 Usage 1 → to Material EXISTING_MAT Plant 1012 Usage 1",
-    "actionId": "act_1790599518633_26ac0bd3_bom_0_EXISTING_MAT_alt2",
-    "timestamp": "2026-09-28T12:45:18.635Z"
+    "actionId": "act_1790665371160_a67e264d_bom_0_EXISTING_MAT_alt2",
+    "timestamp": "2026-09-29T07:02:51.161Z"
   }
 ]

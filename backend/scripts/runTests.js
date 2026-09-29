@@ -19,6 +19,8 @@ const testFiles = [
   'test/deleteBomVerification.test.js',
   'test/sapMultiSession.test.js',
   'test/bomStructuralPreservation.test.js',
+  'test/bomDiscrepancyFixes.test.js',
+  'test/crossPlantAlternativeFix.test.js',
   'test/vbsSyntaxValidation.test.js'
 ];
 
