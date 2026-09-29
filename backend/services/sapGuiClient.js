@@ -1484,28 +1484,26 @@ export async function createBomViaGui(params) {
     };
   }
 
-  // 1. Build component line item script statements
-  const componentStatements = [];
+  // 1. Build component data array assignments for VBScript
   const normalizedComponents = Array.isArray(components) ? components : [];
+  const validComponents = normalizedComponents.filter(c => Boolean(c.component || c.material || c.id));
 
-  normalizedComponents.forEach((item, idx) => {
+  if (validComponents.length === 0) {
+    return {
+      success: false,
+      verified: false,
+      code: 'SOURCE_BOM_EMPTY',
+      message: `Cannot create BOM: No valid components supplied for material ${cleanMat} in plant ${cleanPlt}.`
+    };
+  }
+
+  const compDataAssignments = validComponents.map((item, idx) => {
     const compPos = escapeVbsString(item.item || item.posnr || '');
     const compMaterial = escapeVbsString(item.component || item.material || item.id || '');
     const compQty = escapeVbsString(item.quantity || item.qty || '1');
-    const compItemCat = escapeVbsString(item.itemCategory || item.postp || 'L'); // 'L' = Stock item (confirmed working)
-
-    if (compMaterial) {
-      componentStatements.push(`
-    ' Component Row ${idx + 1} (row index ${idx})
-    ${compPos ? `session.findById("${CS01_FIELD_IDS.TABLE_BASE}/txtRC29P-POSNR[0,${idx}]").text = "${compPos}"` : ''}
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${idx}]").text = "${compItemCat}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${idx}]").text = "${compMaterial}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${idx}]").text = "${compQty}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${idx}]").setFocus
-    WScript.Sleep 200
-      `);
-    }
-  });
+    const compItemCat = escapeVbsString(item.itemCategory || item.postp || 'L');
+    return `compsData(${idx}, 0) = "${compMaterial}"\r\ncompsData(${idx}, 1) = "${compQty}"\r\ncompsData(${idx}, 2) = "${compItemCat}"\r\ncompsData(${idx}, 3) = "${compPos}"`;
+  }).join('\r\n');
 
   // 2. Assemble complete automation VBScript
   const vbsScript = `
@@ -1624,6 +1622,62 @@ Function IsHardError(popupText)
     IsHardError = False
 End Function
 
+Function FindTableControlRecursive(container)
+    Set FindTableControlRecursive = Nothing
+    On Error Resume Next
+    Dim i, child, res
+    If container Is Nothing Then Exit Function
+    For i = 0 To container.Children.Count - 1
+        Set child = container.Children(CInt(i))
+        If Not child Is Nothing Then
+            If child.Type = "GuiTableControl" Then
+                Set FindTableControlRecursive = child
+                Exit Function
+            ElseIf child.ContainerType Then
+                Set res = FindTableControlRecursive(child)
+                If Not res Is Nothing Then
+                    Set FindTableControlRecursive = res
+                    Exit Function
+                End If
+            End If
+        End If
+    Next
+    On Error Goto 0
+End Function
+
+Function FindComponentTable(sessionObj)
+    Set FindComponentTable = Nothing
+    On Error Resume Next
+    Dim t, usrObj
+    ' 1. Check known Screen 2150 tabstrip path
+    Set t = sessionObj.findById("wnd[0]/usr/tabsTS_ITOV/tabpTCMA/ssubSUBPAGE:SAPLCSDI:0152/tblSAPLCSDITCMAT")
+    If Not t Is Nothing Then
+        Set FindComponentTable = t
+        Exit Function
+    End If
+    ' 2. Check direct / fallback paths
+    Set t = sessionObj.findById("wnd[0]/usr/tblSAPLCSDITCMAT")
+    If Not t Is Nothing Then
+        Set FindComponentTable = t
+        Exit Function
+    End If
+    Set t = sessionObj.findById("wnd[0]/usr/tblSAPLCSDITCPG")
+    If Not t Is Nothing Then
+        Set FindComponentTable = t
+        Exit Function
+    End If
+    ' 3. Recursive discovery from wnd[0]/usr
+    Set usrObj = sessionObj.findById("wnd[0]/usr")
+    If Not usrObj Is Nothing Then
+        Set t = FindTableControlRecursive(usrObj)
+        If Not t Is Nothing Then
+            Set FindComponentTable = t
+            Exit Function
+        End If
+    End If
+    On Error Goto 0
+End Function
+
 Dim rawErrInfo, SapGuiAuto, app, conn, session
 Set SapGuiAuto = GetSapGuiObject(rawErrInfo)
 If SapGuiAuto Is Nothing Then
@@ -1733,11 +1787,8 @@ End If
 
 ' In SAP CS01, if a status bar warning/info was displayed on screen 0100 (or after dismissing an informational popup),
 ' an additional Enter is required to advance to the Item Overview screen.
-Dim tblCtrl
-Set tblCtrl = Nothing
-On Error Resume Next
-Set tblCtrl = session.findById("${CS01_FIELD_IDS.TABLE_BASE}")
-On Error Goto 0
+Dim tblCtrl, tblId
+Set tblCtrl = FindComponentTable(session)
 
 If tblCtrl Is Nothing Then
     session.findById("wnd[0]").sendVKey 0
@@ -1772,17 +1823,13 @@ If tblCtrl Is Nothing Then
             WScript.Sleep 500
         End If
     Loop
+    Set tblCtrl = FindComponentTable(session)
 End If
 
 ' Delay to ensure component table screen is fully loaded
-WScript.Sleep 500
+WScript.Sleep 400
 
 ' Confirm table control is present before attempting to populate components
-Set tblCtrl = Nothing
-On Error Resume Next
-Set tblCtrl = session.findById("${CS01_FIELD_IDS.TABLE_BASE}")
-On Error Goto 0
-
 If tblCtrl Is Nothing Then
     Dim navErrText, safeNavErr
     navErrText = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").text
@@ -1794,8 +1841,126 @@ If tblCtrl Is Nothing Then
     WScript.Quit 0
 End If
 
-' 3. Fill Component Line Items
-${componentStatements.join('\n')}
+tblId = tblCtrl.Id
+
+' 3. Populate Components Safely with Dynamic Row Detection and Multi-Page Scrolling
+Dim compsCount
+compsCount = ${validComponents.length}
+
+Dim compsData(${Math.max(0, validComponents.length - 1)}, 3)
+${compDataAssignments}
+
+Dim cIdx, curMat, curQty, curCat, curPos
+Dim visRow, visMax, compCell, insertedCount, lastInserted
+Dim draftMat, draftQty, draftCat
+Dim diagTx, diagScreen, diagTitle, diagSbar
+
+insertedCount = 0
+lastInserted = ""
+visRow = 0
+
+For cIdx = 0 To compsCount - 1
+    curMat = compsData(cIdx, 0)
+    curQty = compsData(cIdx, 1)
+    curCat = compsData(cIdx, 2)
+    curPos = compsData(cIdx, 3)
+
+    If curCat = "" Then curCat = "L"
+    If curQty = "" Then curQty = "1"
+
+    ' Refresh table reference and check visible capacity
+    Set tblCtrl = FindComponentTable(session)
+    If tblCtrl Is Nothing Then
+        WScript.Echo "{""success"":false,""verified"":false,""code"":""TABLE_LOST"",""message"":""Lost table control during component entry for ${escapeVbsString(material)}.""}"
+        session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+        session.findById("wnd[0]").sendVKey 0
+        WScript.Quit 0
+    End If
+
+    tblId = tblCtrl.Id
+    visMax = tblCtrl.VisibleRowCount
+    If visMax <= 0 Then visMax = 16
+
+    ' If current visible rows on this page are exhausted, commit page and advance to New Entries
+    If visRow >= visMax Then
+        session.findById("wnd[0]").sendVKey 0
+        WScript.Sleep 400
+
+        popupLoopCount = 0
+        Do While session.Children.Count > 1 And popupLoopCount < 5
+            popupLoopCount = popupLoopCount + 1
+            session.findById("wnd[1]").sendVKey 0
+            WScript.Sleep 300
+        Loop
+
+        If session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "W" Or session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "I" Then
+            session.findById("wnd[0]").sendVKey 0
+            WScript.Sleep 300
+        End If
+
+        ' Advance to fresh empty rows via New Entries (btn[5] / F5)
+        session.findById("wnd[0]/tbar[1]/btn[5]").press
+        WScript.Sleep 400
+
+        Set tblCtrl = FindComponentTable(session)
+        If tblCtrl Is Nothing Then
+            WScript.Echo "{""success"":false,""verified"":false,""code"":""TABLE_LOST"",""message"":""Lost table control after advancing to new entries for ${escapeVbsString(material)}.""}"
+            session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+            session.findById("wnd[0]").sendVKey 0
+            WScript.Quit 0
+        End If
+        tblId = tblCtrl.Id
+        visRow = 0
+    End If
+
+    ' Verify cell control exists BEFORE accessing
+    Set compCell = Nothing
+    On Error Resume Next
+    Set compCell = session.findById(tblId & "/ctxtRC29P-IDNRK[2," & visRow & "]")
+    On Error Goto 0
+
+    If compCell Is Nothing Then
+        diagTx = session.Info.Transaction
+        diagScreen = session.Info.ScreenNumber
+        diagTitle = JsonEscape(session.findById("wnd[0]").text)
+        diagSbar = JsonEscape(session.findById("${CS01_FIELD_IDS.STATUS_BAR}").text)
+
+        WScript.Echo "{""success"":false,""verified"":false,""code"":""CONTROL_NOT_FOUND"",""message"":""Table control row not found by id at row " & visRow & " on screen " & diagScreen & " (last inserted: " & JsonEscape(lastInserted) & "): " & diagSbar & """,""diagnostics"":{""transaction"":""" & diagTx & """,""screenNumber"":""" & diagScreen & """,""windowTitle"":""" & diagTitle & """,""tableControlId"":""" & JsonEscape(tblId) & """,""requestedRowIndex"":" & visRow & ",""visibleRowCount"":" & visMax & ",""lastInsertedComponent"":""" & JsonEscape(lastInserted) & """,""material"":""${escapeVbsString(material)}"",""targetAlternative"":""" & createdAltBom & """}}"
+        session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+        session.findById("wnd[0]").sendVKey 0
+        WScript.Quit 0
+    End If
+
+    ' Check if existing row in current draft already has this component (Section C)
+    draftMat = Trim(compCell.text)
+    draftQty = ""
+    draftCat = ""
+    On Error Resume Next
+    draftQty = Trim(session.findById(tblId & "/txtRC29P-MENGE[4," & visRow & "]").text)
+    draftCat = Trim(session.findById(tblId & "/ctxtRC29P-POSTP[1," & visRow & "]").text)
+    On Error Goto 0
+
+    If draftMat <> "" And UCase(draftMat) = UCase(curMat) And draftQty = curQty And UCase(draftCat) = UCase(curCat) Then
+        ' Already present with matching attributes in current draft — do not re-insert
+        lastInserted = curMat
+        insertedCount = insertedCount + 1
+        visRow = visRow + 1
+    Else
+        If curPos <> "" Then
+            On Error Resume Next
+            session.findById(tblId & "/txtRC29P-POSNR[0," & visRow & "]").text = curPos
+            On Error Goto 0
+        End If
+        session.findById(tblId & "/ctxtRC29P-POSTP[1," & visRow & "]").text = curCat
+        session.findById(tblId & "/ctxtRC29P-IDNRK[2," & visRow & "]").text = curMat
+        session.findById(tblId & "/txtRC29P-MENGE[4," & visRow & "]").text = curQty
+        session.findById(tblId & "/txtRC29P-MENGE[4," & visRow & "]").setFocus
+
+        lastInserted = curMat
+        insertedCount = insertedCount + 1
+        visRow = visRow + 1
+    End If
+Next
 
 ' Explicitly send Enter (sendVKey 0) to commit the component row BEFORE moving to Save
 session.findById("wnd[0]").sendVKey 0

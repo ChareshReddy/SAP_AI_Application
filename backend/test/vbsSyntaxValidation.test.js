@@ -127,17 +127,9 @@ async function runVbsSyntaxTests() {
   const createVbsEnd = code.indexOf('`;\n\n  try {', createVbsStart);
   const createTemplate = code.substring(createVbsStart + 'const vbsScript = `'.length, createVbsEnd);
 
-  const componentStatements = [];
-  SAMPLE_A1BH0214C_COMPONENTS.forEach((item, idx) => {
-    componentStatements.push(`
-    ' Component Row ${idx + 1} (row index ${idx})
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${idx}]").text = "${item.itemCategory}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${idx}]").text = "${item.material}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${idx}]").text = "${item.quantity}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${idx}]").setFocus
-    WScript.Sleep 200
-    `);
-  });
+  const compDataAssignments = SAMPLE_A1BH0214C_COMPONENTS.map((item, idx) => {
+    return `compsData(${idx}, 0) = "${item.material}"\r\ncompsData(${idx}, 1) = "${item.quantity}"\r\ncompsData(${idx}, 2) = "${item.itemCategory}"\r\ncompsData(${idx}, 3) = "${item.item || ''}"`;
+  }).join('\r\n');
 
   const renderedCreateVbs = createTemplate
     .replace(/\$\{getSessionDiscoveryVbs\(targetSessionPath, expectedUser\)\}/g, 'Set session = app.FindById("/app/con[0]/ses[0]")')
@@ -153,7 +145,9 @@ async function runVbsSyntaxTests() {
     .replace(/\$\{CS01_FIELD_IDS\.ITEM_CATEGORY_FIELD\}/g, CS01_FIELD_IDS.ITEM_CATEGORY_FIELD)
     .replace(/\$\{CS01_FIELD_IDS\.COMPONENT_FIELD\}/g, CS01_FIELD_IDS.COMPONENT_FIELD)
     .replace(/\$\{CS01_FIELD_IDS\.QUANTITY_FIELD\}/g, CS01_FIELD_IDS.QUANTITY_FIELD)
-    .replace(/\$\{componentStatements\.join\('\\n'\)\}/g, componentStatements.join('\n'))
+    .replace(/\$\{validComponents\.length\}/g, SAMPLE_A1BH0214C_COMPONENTS.length)
+    .replace(/\$\{Math\.max\(0, validComponents\.length - 1\)\}/g, Math.max(0, SAMPLE_A1BH0214C_COMPONENTS.length - 1))
+    .replace(/\$\{compDataAssignments\}/g, compDataAssignments)
     .replace(/\$\{escapeVbsString\(material\)\}/g, 'A1BH0214C')
     .replace(/\$\{escapeVbsString\(plant\)\}/g, '1012')
     .replace(/\$\{escapeVbsString\(bomUsage\)\}/g, '1')
