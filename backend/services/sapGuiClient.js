@@ -2208,98 +2208,18 @@ export async function copyBomViaGui(params) {
     };
   }
 
-  // In SAP GUI CS01, when adding an alternative to an existing BOM across plants,
-  // the Copy From popup (wnd[1]) locks the Plant and Material fields to the target plant/material.
-  // Standard CS01 Copy-From popup does not support cross-plant copy for existing BOMs.
-  // When target BOM already exists and source plant differs from target plant,
-  // we copy the BOM by creating the new alternative directly in CS01 using the verified source components.
+  // Resolve target alternative if target BOM already exists and alternative is not specified
   let targetCheck = null;
-  if (cleanSourcePlant !== cleanTargetPlant) {
-    targetCheck = await verifyBomInCs03({
-      material: cleanTargetMat,
-      plant: cleanTargetPlant,
-      bomUsage: cleanTargetUsage
-    });
-  }
+  targetCheck = await verifyBomInCs03({
+    material: cleanTargetMat,
+    plant: cleanTargetPlant,
+    bomUsage: cleanTargetUsage
+  });
 
   const targetAlreadyExists = Boolean(targetCheck?.success && targetCheck?.exists);
   const resolvedTargetAlt = targetAlreadyExists
     ? resolveNextAvailableAlternative(targetCheck.availableAlternatives || ['1'], cleanTargetAlt)
     : resolveNextAvailableAlternative([], cleanTargetAlt);
-
-  if (targetAlreadyExists && cleanSourcePlant !== cleanTargetPlant) {
-    const createResult = await createBomViaGui({
-      material: cleanTargetMat,
-      plant: cleanTargetPlant,
-      bomUsage: cleanTargetUsage,
-      alternativeBom: resolvedTargetAlt,
-      validFrom: target.validFrom || '',
-      components: sourceCheck.components || []
-    });
-
-    if (!createResult.success || createResult.verified === false) {
-      return createResult;
-    }
-
-    const targetCs03 = await verifyBomInCs03({
-      material: cleanTargetMat,
-      plant: cleanTargetPlant,
-      bomUsage: cleanTargetUsage,
-      alternativeBom: resolvedTargetAlt
-    });
-
-    const comparison = compareBomStructures({
-      sourceComponents: sourceCheck.components || [],
-      targetComponents: targetCs03.components || [],
-      targetPlant: cleanTargetPlant,
-      missingSubBomMaterials: params.missingSubBomMaterials || [],
-      copiedMainOnly: params.copiedMainOnly !== undefined ? Boolean(params.copiedMainOnly) : true,
-      allowMissingSubBoms: Boolean(params.allowMissingSubBoms)
-    });
-
-    if (!comparison.match) {
-      return {
-        success: false,
-        verified: false,
-        code: 'STRUCTURAL_VERIFICATION_FAILED',
-        message: comparison.summary,
-        differences: comparison.differences,
-        before: null,
-        after: null
-      };
-    }
-
-    const createdRecord = {
-      material: target.material,
-      plant: target.plant,
-      bomUsage: target.bomUsage || '1',
-      alternativeBom: resolvedTargetAlt,
-      sourceReference: {
-        material: source.material,
-        plant: source.plant,
-        bomUsage: source.bomUsage || '1',
-        alternativeBom: source.alternativeBom || ''
-      },
-      validFrom: target.validFrom || '',
-      components: targetCs03.components || [],
-      warnings: comparison.warnings,
-      status: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'COPIED_WITH_WARNINGS_VIA_GUI' : 'COPIED_AND_VERIFIED_VIA_GUI'
-    };
-
-    return {
-      success: true,
-      verified: true,
-      status: comparison.status,
-      warnings: comparison.warnings,
-      code: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'BOM_COPIED_WITH_WARNINGS' : 'BOM_COPIED_AND_VERIFIED',
-      message: comparison.status === 'SUCCESS_WITH_WARNINGS'
-        ? `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${resolvedTargetAlt}) copied from ${cleanSourceMat}/${cleanSourcePlant}. [SUCCESS_WITH_WARNINGS: ${comparison.warnings.map(w => w.reason).join('; ')}]`
-        : `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${resolvedTargetAlt}) copied from ${cleanSourceMat}/${cleanSourcePlant} and verified in CS03.`,
-      before: null,
-      after: createdRecord,
-      alternativeBom: resolvedTargetAlt
-    };
-  }
 
   const sourceMaterial = escapeVbsString(source.material);
   const sourcePlant = escapeVbsString(source.plant);
@@ -2309,7 +2229,7 @@ export async function copyBomViaGui(params) {
   const targetMaterial = escapeVbsString(target.material);
   const targetPlant = escapeVbsString(target.plant);
   const targetBomUsage = escapeVbsString(target.bomUsage || '1');
-  const targetAltBom = escapeVbsString(target.alternativeBom || '');
+  const targetAltBom = escapeVbsString(resolvedTargetAlt || target.alternativeBom || '');
   const targetValidFrom = escapeVbsString(target.validFrom || '');
   const targetSessionPath = preflight.sessionPath || '';
   const expectedUser = preflight.user || '';
@@ -2591,19 +2511,6 @@ Set fldRefUsg = wnd1.findById("usr/ctxtRC29N-STLAN")
 Set fldRefAlt = wnd1.findById("usr/txtRC29N-STLAL")
 On Error Goto 0
 
-' Check if Plant field is locked to target plant and differs from source plant
-If Not fldRefPlt Is Nothing Then
-    If (Not fldRefPlt.changeable) And UCase(Trim(fldRefPlt.text)) <> UCase("${sourcePlant}") Then
-        WScript.Echo "{""success"":false,""verified"":false,""code"":""CROSS_PLANT_ALT_LOCKED"",""message"":""In SAP GUI CS01, cross-plant copy is not permitted in Copy From popup when adding an alternative to an existing BOM. Fallback to direct creation.""}"
-        On Error Resume Next
-        wnd1.findById("tbar[0]/btn[12]").press
-        session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
-        session.findById("wnd[0]").sendVKey 0
-        On Error Goto 0
-        WScript.Quit 0
-    End If
-End If
-
 ' Safely assign only changeable fields to avoid SAP Frontend Server invalid argument COM error 613
 If Not fldRefMat Is Nothing Then
     If fldRefMat.changeable Then fldRefMat.text = "${sourceMaterial}"
@@ -2663,8 +2570,8 @@ If session.Info.ScreenNumber = "0187" Or session.Info.ScreenNumber = "187" Then
                 Exit For
             End If
         Next
-        ' If sourceAltBom was not explicitly specified and "1" was not found, pick the first available alternative
-        If foundAltRow < 0 And "${sourceAltBom}" = "" Then
+        ' If matchAlt was not found or sourceAltBom was not explicitly specified, pick the first available non-empty row
+        If foundAltRow < 0 Then
             For copyAltRow = 0 To copyAltTbl.RowCount - 1
                 rAlt = ""
                 On Error Resume Next
@@ -2702,13 +2609,12 @@ If session.Info.ScreenNumber = "0157" Or session.Info.ScreenNumber = "157" Or In
     WScript.Sleep 600
 End If
 
-' Check status bar after copy operation
+' Check status bar and dialogs after copy operation
 ' Handle known SAP component validation sequence (e.g. Storage location not supported in target plant)
-Dim validationEnterCount, maxValidationEnters, curValMsg
+Dim validationEnterCount, curValMsg, postPopTxt
 validationEnterCount = 0
-maxValidationEnters = 20
 
-Do While validationEnterCount < maxValidationEnters
+Do While validationEnterCount < 20
     curValMsg = CheckStorageLocValidation(session)
     If curValMsg <> "" Then
         validationEnterCount = validationEnterCount + 1
@@ -2717,36 +2623,26 @@ Do While validationEnterCount < maxValidationEnters
         Else
             session.findById("wnd[0]").sendVKey 0
         End If
-        WScript.Sleep 500
+        WScript.Sleep 400
+    ElseIf session.Children.Count > 1 Then
+        postPopTxt = GetWindowText(session.findById("wnd[1]"))
+        If IsHardError(postPopTxt) Then
+            WScript.Echo "{""success"":false,""verified"":false,""code"":""COPY_FAILED"",""message"":""Copy Error: " & JsonEscape(postPopTxt) & """}"
+            session.findById("wnd[1]").sendVKey 12
+            session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+            session.findById("wnd[0]").sendVKey 0
+            WScript.Quit 0
+        Else
+            validationEnterCount = validationEnterCount + 1
+            session.findById("wnd[1]").sendVKey 0
+            WScript.Sleep 400
+        End If
+    ElseIf session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "W" Or session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "I" Then
+        validationEnterCount = validationEnterCount + 1
+        session.findById("wnd[0]").sendVKey 0
+        WScript.Sleep 400
     Else
         Exit Do
-    End If
-Loop
-
-' After Enter sequence: re-check if validation safety limit was reached
-curValMsg = CheckStorageLocValidation(session)
-If curValMsg <> "" And validationEnterCount >= maxValidationEnters Then
-    WScript.Echo "{""success"":false,""verified"":false,""code"":""VALIDATION_LIMIT_EXCEEDED"",""message"":""Safety limit reached: SAP validation still active after " & maxValidationEnters & " Enters. Last message: " & JsonEscape(curValMsg) & """}"
-    session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
-    session.findById("wnd[0]").sendVKey 0
-    WScript.Quit 0
-End If
-
-' Dismiss any modal dialogs (check if error)
-Dim postCopyPopLoop, postCopyPopText
-postCopyPopLoop = 0
-Do While session.Children.Count > 1 And postCopyPopLoop < 5
-    postCopyPopLoop = postCopyPopLoop + 1
-    postCopyPopText = GetWindowText(session.findById("wnd[1]"))
-    If IsHardError(postCopyPopText) Then
-        WScript.Echo "{""success"":false,""verified"":false,""code"":""COPY_FAILED"",""message"":""Copy Error: " & JsonEscape(postCopyPopText) & """}"
-        session.findById("wnd[1]").sendVKey 12
-        session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
-        session.findById("wnd[0]").sendVKey 0
-        WScript.Quit 0
-    Else
-        session.findById("wnd[1]").sendVKey 0
-        WScript.Sleep 300
     End If
 Loop
 
@@ -3033,87 +2929,14 @@ WScript.Echo "{""success"":true,""verified"":true,""message"":""" & safeSaveMsg 
     }
 
     if (!parsedResult.success || parsedResult.verified === false) {
-      if (parsedResult.code === 'CROSS_PLANT_ALT_LOCKED') {
-        const createResult = await createBomViaGui({
-          material: cleanTargetMat,
-          plant: cleanTargetPlant,
-          bomUsage: cleanTargetUsage,
-          alternativeBom: cleanTargetAlt || '2',
-          validFrom: target.validFrom || '',
-          components: sourceCheck.components || []
-        });
-
-        if (!createResult.success || createResult.verified === false) {
-          return createResult;
-        }
-
-        const targetCs03 = await verifyBomInCs03({
-          material: cleanTargetMat,
-          plant: cleanTargetPlant,
-          bomUsage: cleanTargetUsage,
-          alternativeBom: createResult.alternativeBom || cleanTargetAlt || '2'
-        });
-
-        const comparison = compareBomStructures({
-          sourceComponents: sourceCheck.components || [],
-          targetComponents: targetCs03.components || [],
-          targetPlant: cleanTargetPlant,
-          missingSubBomMaterials: params.missingSubBomMaterials || [],
-          copiedMainOnly: params.copiedMainOnly !== undefined ? Boolean(params.copiedMainOnly) : true,
-          allowMissingSubBoms: Boolean(params.allowMissingSubBoms)
-        });
-
-        if (!comparison.match) {
-          return {
-            success: false,
-            verified: false,
-            code: 'STRUCTURAL_VERIFICATION_FAILED',
-            message: comparison.summary,
-            differences: comparison.differences,
-            before: null,
-            after: null
-          };
-        }
-
-        const createdRecord = {
-          material: target.material,
-          plant: target.plant,
-          bomUsage: target.bomUsage || '1',
-          alternativeBom: createResult.alternativeBom || cleanTargetAlt || '2',
-          sourceReference: {
-            material: source.material,
-            plant: source.plant,
-            bomUsage: source.bomUsage || '1',
-            alternativeBom: source.alternativeBom || ''
-          },
-          validFrom: target.validFrom || '',
-          components: targetCs03.components || [],
-          warnings: comparison.warnings,
-          status: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'COPIED_WITH_WARNINGS_VIA_GUI' : 'COPIED_AND_VERIFIED_VIA_GUI'
-        };
-
-        return {
-          success: true,
-          verified: true,
-          status: comparison.status,
-          warnings: comparison.warnings,
-          code: comparison.status === 'SUCCESS_WITH_WARNINGS' ? 'BOM_COPIED_WITH_WARNINGS' : 'BOM_COPIED_AND_VERIFIED',
-          message: comparison.status === 'SUCCESS_WITH_WARNINGS'
-            ? `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${createdRecord.alternativeBom}) copied from ${cleanSourceMat}/${cleanSourcePlant}. [SUCCESS_WITH_WARNINGS: ${comparison.warnings.map(w => w.reason).join('; ')}]`
-            : `BOM for material ${cleanTargetMat} created in plant ${cleanTargetPlant} (Usage ${cleanTargetUsage}, Alt ${createdRecord.alternativeBom}) copied from ${cleanSourceMat}/${cleanSourcePlant} and verified in CS03.`,
-          before: null,
-          after: createdRecord,
-          alternativeBom: createdRecord.alternativeBom
-        };
-      }
-
       return {
         success: false,
         verified: false,
         code: parsedResult.code || 'GUI_COPY_FAILED',
         message: parsedResult.message || 'Copy From BOM failed or could not be verified in SAP GUI.',
         before: null,
-        after: null
+        after: null,
+        capturedControls: parsedResult.capturedControls || null
       };
     }
 

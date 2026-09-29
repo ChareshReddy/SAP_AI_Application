@@ -14,11 +14,82 @@ import {
   ZBOM_COPY_FIELD_IDS
 } from '../services/sapGuiClient.js';
 
+function checkUndeclaredVariables(vbsContent, testName) {
+  const declared = new Set([
+    'wscript', 'err', 'nothing', 'true', 'false', 'empty', 'null',
+    'vbtrue', 'vbfalse', 'vbcr', 'vblf', 'vbcrlf', 'vbtab',
+    'lcase', 'ucase', 'trim', 'cstr', 'cint', 'clng', 'cdbl', 'cdate',
+    'isnull', 'isempty', 'isnumeric', 'isarray', 'isobject',
+    'instr', 'replace', 'createobject', 'getobject', 'hex', 'space',
+    'left', 'right', 'mid', 'len', 'split', 'join', 'ubound', 'lbound',
+    'date', 'now', 'time'
+  ]);
+
+  // Extract all Dim variables
+  const dimRegex = /^\s*Dim\s+([^\r\n']+)/gim;
+  let match;
+  while ((match = dimRegex.exec(vbsContent)) !== null) {
+    const vars = match[1].split(',');
+    for (const v of vars) {
+      const clean = v.trim().toLowerCase();
+      if (clean) declared.add(clean);
+    }
+  }
+
+  // Extract all Function / Sub names and parameters
+  const funcRegex = /^\s*(?:Function|Sub)\s+([a-zA-Z0-9_]+)\s*(?:\(([^)]*)\))?/gim;
+  while ((match = funcRegex.exec(vbsContent)) !== null) {
+    declared.add(match[1].trim().toLowerCase());
+    if (match[2]) {
+      const params = match[2].split(',');
+      for (const p of params) {
+        const cleanP = p.replace(/\b(ByVal|ByRef)\b/gi, '').trim().toLowerCase();
+        if (cleanP) declared.add(cleanP);
+      }
+    }
+  }
+
+  // Check assignments and conditions
+  const lines = vbsContent.split(/\r?\n/);
+  for (let lineNum = 1; lineNum <= lines.length; lineNum++) {
+    const rawLine = lines[lineNum - 1];
+    const line = rawLine.split("'")[0].trim();
+    if (!line) continue;
+
+    const forMatch = line.match(/^For\s+([a-zA-Z0-9_]+)\s*=/i);
+    if (forMatch) {
+      const v = forMatch[1].toLowerCase();
+      assert.ok(declared.has(v), `Undeclared variable '${forMatch[1]}' in For loop on line ${lineNum} in ${testName}`);
+    }
+
+    const setMatch = line.match(/^Set\s+([a-zA-Z0-9_]+)\s*=/i);
+    if (setMatch) {
+      const v = setMatch[1].toLowerCase();
+      assert.ok(declared.has(v), `Undeclared variable '${setMatch[1]}' in Set assignment on line ${lineNum} in ${testName}`);
+    }
+
+    const assignMatch = line.match(/^([a-zA-Z0-9_]+)\s*=(?!=)/i);
+    if (assignMatch && !['if', 'elseif', 'while', 'select', 'case', 'set', 'const', 'dim', 'redim', 'exit'].includes(assignMatch[1].toLowerCase())) {
+      const v = assignMatch[1].toLowerCase();
+      assert.ok(declared.has(v), `Undeclared variable '${assignMatch[1]}' in assignment on line ${lineNum} in ${testName}`);
+    }
+
+    const ifMatch = line.match(/^(?:If|ElseIf)\s+([a-zA-Z0-9_]+)\s*(?:[><=]|<>)/i);
+    if (ifMatch && !['not', 'len', 'instr', 'isnull', 'isempty', 'isnumeric'].includes(ifMatch[1].toLowerCase())) {
+      const v = ifMatch[1].toLowerCase();
+      assert.ok(declared.has(v), `Undeclared variable '${ifMatch[1]}' in condition on line ${lineNum} in ${testName}`);
+    }
+  }
+  console.log(`   ✓ [Variables OK] All assigned/condition variables declared in ${testName}`);
+}
+
 function validateVbsSyntax(vbsContent, testName) {
   // Ensure Option Explicit is present and prepend WScript.Quit 0 right after it
   // This forces cscript to compile the entire file for syntax errors without executing runtime COM commands
   assert.ok(vbsContent.includes('Option Explicit'), `${testName} must start with Option Explicit`);
   
+  checkUndeclaredVariables(vbsContent, testName);
+
   const testScript = vbsContent.replace('Option Explicit', 'Option Explicit\r\nWScript.Quit 0\r\n');
   const tempPath = path.join(os.tmpdir(), `vbs_syntax_test_${Date.now()}_${Math.random().toString(36).slice(2)}.vbs`);
   
