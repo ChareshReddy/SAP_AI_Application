@@ -118,7 +118,7 @@ async function runVbsSyntaxTests() {
   console.log('======================================================');
 
   const sapGuiClientPath = path.resolve(__dirname, '../services/sapGuiClient.js');
-  const code = fs.readFileSync(sapGuiClientPath, 'utf-8');
+  const code = fs.readFileSync(sapGuiClientPath, 'utf-8').replace(/\r\n/g, '\n');
 
   // 1. TEST DIRECT-CREATE VBSCRIPT (createBomViaGui) WITH 16 COMPONENTS FOR A1BH0214C ALT 2
   console.log('\n1. Validating createBomViaGui VBScript (A1BH0214C Alt 2 with 16 components):');
@@ -127,17 +127,71 @@ async function runVbsSyntaxTests() {
   const createVbsEnd = code.indexOf('`;\n\n  try {', createVbsStart);
   const createTemplate = code.substring(createVbsStart + 'const vbsScript = `'.length, createVbsEnd);
 
-  const componentStatements = [];
-  SAMPLE_A1BH0214C_COMPONENTS.forEach((item, idx) => {
-    componentStatements.push(`
-    ' Component Row ${idx + 1} (row index ${idx})
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${idx}]").text = "${item.itemCategory}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${idx}]").text = "${item.material}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${idx}]").text = "${item.quantity}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${idx}]").setFocus
+  const BATCH_SIZE = 10;
+  function buildTestComponentStatements(comps) {
+    const stmts = [];
+    comps.forEach((item, idx) => {
+      const relIdx = idx % BATCH_SIZE;
+      const isBatchTransition = idx > 0 && relIdx === 0;
+      if (isBatchTransition) {
+        stmts.push(`
+    ' Commit batch and advance table scroll position for component ${idx + 1}
+    session.findById("wnd[0]").sendVKey 0
+    WScript.Sleep 400
+
+    popupLoopCount = 0
+    Do While session.Children.Count > 1 And popupLoopCount < 5
+        popupLoopCount = popupLoopCount + 1
+        batchPopup = GetWindowText(session.findById("wnd[1]"))
+        If IsHardError(batchPopup) Then
+            WScript.Echo "{""success"":false,""verified"":false,""code"":""ITEM_ERROR"",""message"":""Component Error: " & JsonEscape(batchPopup) & """}"
+            session.findById("wnd[1]").sendVKey 12
+            session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+            session.findById("wnd[0]").sendVKey 0
+            WScript.Quit 0
+        Else
+            session.findById("wnd[1]").sendVKey 0
+            WScript.Sleep 300
+        End If
+    Loop
+
+    For sbarAck = 1 To 5
+        curSbarType = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType
+        If curSbarType = "E" Or curSbarType = "A" Then
+            batchErrTxt = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").text
+            WScript.Echo "{""success"":false,""verified"":false,""code"":""ITEM_ERROR"",""message"":""Component Error: " & JsonEscape(batchErrTxt) & """}"
+            session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+            session.findById("wnd[0]").sendVKey 0
+            WScript.Quit 0
+        ElseIf curSbarType = "W" Or curSbarType = "I" Then
+            session.findById("wnd[0]").sendVKey 0
+            WScript.Sleep 300
+        Else
+            Exit For
+        End If
+    Next
+
+    On Error Resume Next
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}").verticalScrollbar.position = ${idx}
+    On Error Goto 0
+    WScript.Sleep 300
+        `);
+      }
+
+      stmts.push(`
+    ' Component Row ${idx + 1} (relative visible row index ${relIdx})
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${relIdx}]").text = "${item.itemCategory}"
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${relIdx}]").text = "${item.material}"
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${relIdx}]").text = "${item.quantity}"
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.UNIT_FIELD}[5,${relIdx}]").text = "${item.unit || 'KG'}"
+    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${relIdx}]").setFocus
     WScript.Sleep 200
-    `);
-  });
+      `);
+    });
+    return stmts;
+  }
+
+  const componentStatements = buildTestComponentStatements(SAMPLE_A1BH0214C_COMPONENTS);
 
   const renderedCreateVbs = createTemplate
     .replace(/\$\{getSessionDiscoveryVbs\(targetSessionPath, expectedUser\)\}/g, 'Set session = app.FindById("/app/con[0]/ses[0]")')
@@ -153,6 +207,7 @@ async function runVbsSyntaxTests() {
     .replace(/\$\{CS01_FIELD_IDS\.ITEM_CATEGORY_FIELD\}/g, CS01_FIELD_IDS.ITEM_CATEGORY_FIELD)
     .replace(/\$\{CS01_FIELD_IDS\.COMPONENT_FIELD\}/g, CS01_FIELD_IDS.COMPONENT_FIELD)
     .replace(/\$\{CS01_FIELD_IDS\.QUANTITY_FIELD\}/g, CS01_FIELD_IDS.QUANTITY_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.UNIT_FIELD \|\| 'ctxtRC29P-MEINS'\}/g, CS01_FIELD_IDS.UNIT_FIELD)
     .replace(/\$\{componentStatements\.join\('\\n'\)\}/g, componentStatements.join('\n'))
     .replace(/\$\{escapeVbsString\(material\)\}/g, 'A1BH0214C')
     .replace(/\$\{escapeVbsString\(plant\)\}/g, '1012')
@@ -164,6 +219,42 @@ async function runVbsSyntaxTests() {
     .replace(/\$\{createdAltBom \? [^:]+ : ''\}/g, '');
 
   validateVbsSyntax(renderedCreateVbs, 'createBomViaGui (A1BH0214C Alt 2 with 16 components)');
+
+  // 1b. TEST DIRECT-CREATE VBSCRIPT WITH 25 COMPONENTS (Multi-Page Scroll)
+  console.log('\n1b. Validating createBomViaGui VBScript (25 components multi-page scrolling):');
+  const sample25Comps = Array.from({ length: 25 }, (_, i) => ({
+    item: String((i + 1) * 10).padStart(4, '0'),
+    material: `COMP_MAT_${i + 1}`,
+    quantity: '1.500',
+    itemCategory: 'L'
+  }));
+  const componentStatements25 = buildTestComponentStatements(sample25Comps);
+  const renderedCreate25Vbs = createTemplate
+    .replace(/\$\{getSessionDiscoveryVbs\(targetSessionPath, expectedUser\)\}/g, 'Set session = app.FindById("/app/con[0]/ses[0]")')
+    .replace(/\$\{CS01_FIELD_IDS\.OK_CODE\}/g, CS01_FIELD_IDS.OK_CODE)
+    .replace(/\$\{CS01_FIELD_IDS\.MATERIAL\}/g, CS01_FIELD_IDS.MATERIAL)
+    .replace(/\$\{CS01_FIELD_IDS\.PLANT\}/g, CS01_FIELD_IDS.PLANT)
+    .replace(/\$\{CS01_FIELD_IDS\.BOM_USAGE\}/g, CS01_FIELD_IDS.BOM_USAGE)
+    .replace(/\$\{CS01_FIELD_IDS\.ALT_BOM\}/g, CS01_FIELD_IDS.ALT_BOM)
+    .replace(/\$\{CS01_FIELD_IDS\.VALID_FROM\}/g, CS01_FIELD_IDS.VALID_FROM)
+    .replace(/\$\{CS01_FIELD_IDS\.SAVE_BUTTON\}/g, CS01_FIELD_IDS.SAVE_BUTTON)
+    .replace(/\$\{CS01_FIELD_IDS\.STATUS_BAR\}/g, CS01_FIELD_IDS.STATUS_BAR)
+    .replace(/\$\{CS01_FIELD_IDS\.TABLE_BASE\}/g, CS01_FIELD_IDS.TABLE_BASE)
+    .replace(/\$\{CS01_FIELD_IDS\.ITEM_CATEGORY_FIELD\}/g, CS01_FIELD_IDS.ITEM_CATEGORY_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.COMPONENT_FIELD\}/g, CS01_FIELD_IDS.COMPONENT_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.QUANTITY_FIELD\}/g, CS01_FIELD_IDS.QUANTITY_FIELD)
+    .replace(/\$\{CS01_FIELD_IDS\.UNIT_FIELD \|\| 'ctxtRC29P-MEINS'\}/g, CS01_FIELD_IDS.UNIT_FIELD)
+    .replace(/\$\{componentStatements\.join\('\\n'\)\}/g, componentStatements25.join('\n'))
+    .replace(/\$\{escapeVbsString\(material\)\}/g, 'H1SOTAN0031')
+    .replace(/\$\{escapeVbsString\(plant\)\}/g, '1012')
+    .replace(/\$\{escapeVbsString\(bomUsage\)\}/g, '1')
+    .replace(/\$\{escapeVbsString\(alternativeBom\)\}/g, '3')
+    .replace(/\$\{escapeVbsString\(validFrom\)\}/g, '29.09.2026')
+    .replace(/\$\{alternativeBom \? [^:]+ : ''\}/g, 'session.findById("wnd[0]/usr/txtRC29N-STLAL").text = "3"')
+    .replace(/\$\{validFrom \? [^:]+ : ''\}/g, 'session.findById("wnd[0]/usr/ctxtRC29N-DATUV").text = "29.09.2026"')
+    .replace(/\$\{createdAltBom \? [^:]+ : ''\}/g, '');
+
+  validateVbsSyntax(renderedCreate25Vbs, 'createBomViaGui (25 components multi-page scrolling)');
 
   // 2. TEST COPY BOM VBSCRIPT (copyBomViaGui)
   console.log('\n2. Validating copyBomViaGui VBScript:');
