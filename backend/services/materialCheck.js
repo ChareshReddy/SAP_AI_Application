@@ -449,10 +449,54 @@ Function JsonEscape(strVal)
     JsonEscape = Trim(res)
 End Function
 
-Dim SapGuiAuto, app, conn, session, i, j, targetSession
-Set SapGuiAuto = GetObject("SAPGUI")
-If Err.Number <> 0 Or SapGuiAuto Is Nothing Then
-    WScript.Echo "{""success"":false,""code"":""SAP_NOT_RUNNING"",""message"":""No active SAP GUI instance found.""}"
+Function GetSapGuiObject(ByRef rawErrDetails)
+    Dim sapAuto, rotWrapper, attempt, lastErrNum, lastErrDesc
+    Set sapAuto = Nothing
+    lastErrNum = 0
+    lastErrDesc = "No error"
+    rawErrDetails = ""
+
+    For attempt = 1 To 2
+        On Error Resume Next
+        Err.Clear
+        Set sapAuto = GetObject("SAPGUI")
+        lastErrNum = Err.Number
+        lastErrDesc = Err.Description
+        On Error Goto 0
+
+        If lastErrNum = 0 And Not sapAuto Is Nothing Then
+            Set GetSapGuiObject = sapAuto
+            Exit Function
+        End If
+
+        On Error Resume Next
+        Err.Clear
+        Set rotWrapper = CreateObject("SapROTWr.SapROTWrapper")
+        If Err.Number = 0 And Not rotWrapper Is Nothing Then
+            Set sapAuto = rotWrapper.GetROTEntry("SAPGUI")
+            If Not sapAuto Is Nothing Then
+                On Error Goto 0
+                Set GetSapGuiObject = sapAuto
+                Exit Function
+            End If
+            If Err.Number <> 0 Then
+                lastErrNum = Err.Number
+                lastErrDesc = Err.Description
+            End If
+        End If
+        On Error Goto 0
+
+        If attempt < 2 Then WScript.Sleep 200
+    Next
+
+    rawErrDetails = "COM Err " & lastErrNum & " (0x" & Hex(lastErrNum) & "): " & lastErrDesc
+    Set GetSapGuiObject = Nothing
+End Function
+
+Dim rawErrInfo, SapGuiAuto, app, conn, session, i, j, targetSession
+Set SapGuiAuto = GetSapGuiObject(rawErrInfo)
+If SapGuiAuto Is Nothing Then
+    WScript.Echo "{""success"":false,""code"":""SAP_NOT_RUNNING"",""message"":""No active SAP GUI instance found. Please log in to SAP GUI.""}"
     WScript.Quit 0
 End If
 
@@ -476,7 +520,7 @@ For i = 0 To app.Children.Count - 1
 Next
 
 If targetSession Is Nothing Then
-    WScript.Echo "{""success"":false,""code"":""SAP_SESSION_NOT_FOUND"",""message"":""No active logged-in SAP session found.""}"
+    WScript.Echo "{""success"":false,""code"":""SAP_SESSION_NOT_FOUND"",""message"":""No active logged-in SAP session found. Please log in to SAP GUI.""}"
     WScript.Quit 0
 End If
 

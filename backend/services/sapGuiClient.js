@@ -1549,13 +1549,27 @@ export async function createBomViaGui(params) {
 
       componentStatements.push(`
     ' Component Row ${idx + 1} (relative visible row index ${relIdx})
-    ${compPos ? `session.findById("${CS01_FIELD_IDS.TABLE_BASE}/txtRC29P-POSNR[0,${relIdx}]").text = "${compPos}"` : ''}
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${relIdx}]").text = "${compItemCat}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${relIdx}]").text = "${compMaterial}"
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${relIdx}]").text = "${compQty}"
-    ${compUnit ? `session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.UNIT_FIELD || 'ctxtRC29P-MEINS'}[5,${relIdx}]").text = "${compUnit}"` : ''}
-    session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${relIdx}]").setFocus
-    WScript.Sleep 200
+    draftMat = ""
+    draftQty = ""
+    draftCat = ""
+    On Error Resume Next
+    draftMat = Trim(session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${relIdx}]").text)
+    draftQty = Trim(session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${relIdx}]").text)
+    draftCat = Trim(session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${relIdx}]").text)
+    On Error Goto 0
+    curMat = "${compMaterial}"
+    curQty = "${compQty}"
+    curCat = "${compItemCat}"
+
+    If Not (draftMat <> "" And UCase(draftMat) = UCase(curMat) And draftQty = curQty And UCase(draftCat) = UCase(curCat)) Then
+        ${compPos ? `session.findById("${CS01_FIELD_IDS.TABLE_BASE}/txtRC29P-POSNR[0,${relIdx}]").text = "${compPos}"` : ''}
+        session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.ITEM_CATEGORY_FIELD}[1,${relIdx}]").text = "${compItemCat}"
+        session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.COMPONENT_FIELD}[2,${relIdx}]").text = "${compMaterial}"
+        session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${relIdx}]").text = "${compQty}"
+        ${compUnit ? `session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.UNIT_FIELD || 'ctxtRC29P-MEINS'}[5,${relIdx}]").text = "${compUnit}"` : ''}
+        session.findById("${CS01_FIELD_IDS.TABLE_BASE}/${CS01_FIELD_IDS.QUANTITY_FIELD}[4,${relIdx}]").setFocus
+        WScript.Sleep 100
+    End If
       `);
     }
   });
@@ -1678,6 +1692,7 @@ Function IsHardError(popupText)
 End Function
 
 Dim rawErrInfo, SapGuiAuto, app, conn, session, batchPopup, batchErrTxt, sbarAck, curSbarType
+Dim draftMat, draftQty, draftCat, curMat, curQty, curCat
 Set SapGuiAuto = GetSapGuiObject(rawErrInfo)
 If SapGuiAuto Is Nothing Then
     Dim safeRawErr
@@ -2670,7 +2685,7 @@ session.findById("wnd[0]").maximize
 ' 1. Navigate to CS01
 session.findById("${CS01_FIELD_IDS.OK_CODE}").text = "/nCS01"
 session.findById("wnd[0]").sendVKey 0
-WScript.Sleep 500
+WScript.Sleep 250
 
 ' Check modal popups upon navigation
 Do While session.Children.Count > 1
@@ -2683,7 +2698,7 @@ Do While session.Children.Count > 1
         WScript.Quit 0
     Else
         session.findById("wnd[1]").sendVKey 0
-        WScript.Sleep 300
+        WScript.Sleep 150
     End If
 Loop
 
@@ -2699,7 +2714,7 @@ createdAltBom = "${targetAltBom}"
 
 ' 3. Click "Copy From ... (F7)" on Initial Screen
 session.findById("${CS01_FIELD_IDS.COPY_BUTTON}").press
-WScript.Sleep 500
+WScript.Sleep 250
 
 ' Check status bar immediately for errors or warnings (e.g. "Alternative 2 added to BOM", or material not maintained)
 Dim initSbarType, initSbarText, safeInitSbar
@@ -2727,12 +2742,12 @@ If initSbarType = "W" Then
         End If
     End If
     session.findById("wnd[0]").sendVKey 0
-    WScript.Sleep 500
+    WScript.Sleep 250
     
     ' If Copy dialog (wnd[1]) is not yet open after dismissing warning, press Copy From again
     If session.Children.Count <= 1 Then
         session.findById("${CS01_FIELD_IDS.COPY_BUTTON}").press
-        WScript.Sleep 500
+        WScript.Sleep 250
     End If
 End If
 
@@ -2788,7 +2803,7 @@ End If
 
 ' Confirm Copy From Dialog (Green check tick: btn[0] / Enter)
 wnd1.findById("tbar[0]/btn[0]").press
-WScript.Sleep 600
+WScript.Sleep 300
 
 ' Dismiss any modal dialogs (check if error)
 Dim popupLoopCount, copyPopupText, safeCopyPopupText
@@ -2805,7 +2820,7 @@ Do While session.Children.Count > 1 And popupLoopCount < 5
         WScript.Quit 0
     Else
         session.findById("wnd[1]").sendVKey 0
-        WScript.Sleep 300
+        WScript.Sleep 150
     End If
 Loop
 
@@ -2847,7 +2862,7 @@ If session.Info.ScreenNumber = "0187" Or session.Info.ScreenNumber = "187" Then
     If foundAltRow >= 0 Then
         copyAltTbl.getAbsoluteRow(foundAltRow).selected = True
         session.findById("wnd[0]/tbar[1]/btn[7]").press
-        WScript.Sleep 500
+        WScript.Sleep 250
     Else
         ' No matching alternative found in Screen 187!
         session.findById("wnd[0]/tbar[0]/btn[12]").press
@@ -2862,10 +2877,10 @@ End If
 If session.Info.ScreenNumber = "0157" Or session.Info.ScreenNumber = "157" Or InStr(LCase(session.findById("wnd[0]").Text), "copy from") > 0 Then
     ' Press Select All (btn[27] / Ctrl+F3)
     session.findById("wnd[0]/tbar[1]/btn[27]").press
-    WScript.Sleep 400
+    WScript.Sleep 200
     ' Press Copy (btn[5] / F5)
     session.findById("wnd[0]/tbar[1]/btn[5]").press
-    WScript.Sleep 600
+    WScript.Sleep 300
 End If
 
 ' Check status bar and dialogs after copy operation
@@ -2882,7 +2897,7 @@ Do While validationEnterCount < 20
         Else
             session.findById("wnd[0]").sendVKey 0
         End If
-        WScript.Sleep 400
+        WScript.Sleep 150
     ElseIf session.Children.Count > 1 Then
         postPopTxt = GetWindowText(session.findById("wnd[1]"))
         If IsHardError(postPopTxt) Then
@@ -2894,12 +2909,12 @@ Do While validationEnterCount < 20
         Else
             validationEnterCount = validationEnterCount + 1
             session.findById("wnd[1]").sendVKey 0
-            WScript.Sleep 400
+            WScript.Sleep 150
         End If
     ElseIf session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "W" Or session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "I" Then
         validationEnterCount = validationEnterCount + 1
         session.findById("wnd[0]").sendVKey 0
-        WScript.Sleep 400
+        WScript.Sleep 150
     Else
         Exit Do
     End If
@@ -2969,11 +2984,11 @@ End If
 ' If status bar has warning/info (e.g. BADI deviation quantity), clear with Enter before Save
 If session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "W" Then
     session.findById("wnd[0]").sendVKey 0
-    WScript.Sleep 300
+    WScript.Sleep 150
 End If
 
 session.findById("${CS01_FIELD_IDS.SAVE_BUTTON}").press
-WScript.Sleep 600
+WScript.Sleep 300
 
 ' Dismiss save popups / warnings
 popupLoopCount = 0
@@ -2989,7 +3004,7 @@ Do While session.Children.Count > 1 And popupLoopCount < 5
         WScript.Quit 0
     Else
         session.findById("wnd[1]").sendVKey 0
-        WScript.Sleep 300
+        WScript.Sleep 150
     End If
 Loop
 
@@ -3001,7 +3016,7 @@ sbarType = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType
 ' If warning/info on main screen after save, confirm with Enter
 If sbarType = "W" Or sbarType = "I" Then
     session.findById("wnd[0]").sendVKey 0
-    WScript.Sleep 500
+    WScript.Sleep 250
     sbarText = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").text
     sbarType = session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType
 End If
@@ -3034,7 +3049,7 @@ End If
 ' 10. POST-SAVE CS03 VERIFICATION
 session.findById("wnd[0]/tbar[0]/okcd").text = "/nCS03"
 session.findById("wnd[0]").sendVKey 0
-WScript.Sleep 500
+WScript.Sleep 250
 
 session.findById("${CS01_FIELD_IDS.MATERIAL}").text = "${targetMaterial}"
 session.findById("${CS01_FIELD_IDS.PLANT}").text = "${targetPlant}"
@@ -3044,19 +3059,19 @@ If createdAltBom <> "" Then
 End If
 
 session.findById("wnd[0]").sendVKey 0
-WScript.Sleep 500
+WScript.Sleep 250
 
 popupLoopCount = 0
 Do While session.Children.Count > 1 And popupLoopCount < 5
     popupLoopCount = popupLoopCount + 1
     session.findById("wnd[1]").sendVKey 0
-    WScript.Sleep 300
+    WScript.Sleep 150
 Loop
 
 ' Clear any status bar warning on CS03 initial screen
 If session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "W" Or session.findById("${CS01_FIELD_IDS.STATUS_BAR}").messageType = "I" Then
     session.findById("wnd[0]").sendVKey 0
-    WScript.Sleep 500
+    WScript.Sleep 250
 End If
 
 ' If CS03 shows Alternative Overview (Screen 187/120) because multiple alternatives exist:
@@ -3079,7 +3094,7 @@ If session.Info.ScreenNumber = "0187" Or session.Info.ScreenNumber = "187" Then
         session.findById("wnd[0]").sendVKey 2
     End If
     On Error Goto 0
-    WScript.Sleep 500
+    WScript.Sleep 250
 End If
 
 ' Read row 0 of component table in CS03
@@ -3501,7 +3516,7 @@ Function GetSapGuiObject(ByRef rawErrDetails)
         End If
         On Error Goto 0
 
-        If attempt < 3 Then WScript.Sleep 1000
+        If attempt < 3 Then WScript.Sleep 200
     Next
 
     rawErrDetails = "COM Err " & lastErrNum & " (0x" & Hex(lastErrNum) & "): " & lastErrDesc
@@ -3533,14 +3548,14 @@ End If
 session.findById("wnd[0]").maximize
 session.findById("${CS01_FIELD_IDS.OK_CODE}").text = "/nCS03"
 session.findById("wnd[0]").sendVKey 0
-WScript.Sleep 500
+WScript.Sleep 200
 
 Dim popLoop1
 popLoop1 = 0
 Do While session.Children.Count > 1 And popLoop1 < 3
     popLoop1 = popLoop1 + 1
     session.findById("wnd[1]").sendVKey 0
-    WScript.Sleep 300
+    WScript.Sleep 150
 Loop
 
 session.findById("${CS01_FIELD_IDS.MATERIAL}").text = "${escapeVbsString(material)}"
@@ -3549,14 +3564,14 @@ session.findById("${CS01_FIELD_IDS.BOM_USAGE}").text = "${escapeVbsString(bomUsa
 ${alternativeBom ? `session.findById("${CS01_FIELD_IDS.ALT_BOM}").text = "${escapeVbsString(alternativeBom)}"` : ''}
 
 session.findById("wnd[0]").sendVKey 0
-WScript.Sleep 500
+WScript.Sleep 250
 
 Dim popLoop2
 popLoop2 = 0
 Do While session.Children.Count > 1 And popLoop2 < 3
     popLoop2 = popLoop2 + 1
     session.findById("wnd[1]").sendVKey 0
-    WScript.Sleep 300
+    WScript.Sleep 150
 Loop
 
 Dim cs03SbarType, cs03SbarText, safeCs03Sbar
@@ -3573,7 +3588,7 @@ End If
 
 If cs03SbarType = "W" Or cs03SbarType = "I" Then
     session.findById("wnd[0]").sendVKey 0
-    WScript.Sleep 500
+    WScript.Sleep 200
 End If
 
 ' Check if we are on Screen 187 (Alternative Overview)
@@ -3620,7 +3635,7 @@ If Not tbl187 Is Nothing Then
     If selectedRow < 0 Then selectedRow = 0
     tbl187.getAbsoluteRow(selectedRow).selected = True
     session.findById("wnd[0]").sendVKey 2
-    WScript.Sleep 600
+    WScript.Sleep 250
 End If
 
 Dim tblCs03
@@ -4732,15 +4747,10 @@ export async function copyBomHierarchyWithRepair({
     auditHook?.(record, resolvedTargetAlt, copyRes);
     createdBoms.push(record);
 
-    // Identify assemblies from the source BOM
-    const srcRes = await verifyBomInCs03({
-      material: srcMat,
-      plant: srcPlant,
-      bomUsage: srcUsage,
-      alternativeBom: srcAlt
-    });
-
-    const components = srcRes.components || copyRes.after?.components || [];
+    // Identify assemblies from the source components returned by copyRes
+    const components = (copyRes.after?.components && copyRes.after.components.length > 0)
+      ? copyRes.after.components
+      : (await verifyBomInCs03({ material: srcMat, plant: srcPlant, bomUsage: srcUsage, alternativeBom: srcAlt })).components || [];
 
     // Recurse into every assembly component
     for (const comp of components) {
@@ -4808,6 +4818,7 @@ export async function copyBomHierarchyWithRepair({
   });
 
   // STEP 3: REPAIR missing sub-BOMs if any
+  let finalVerify = initialVerify;
   if (initialVerify.missingSubBoms && initialVerify.missingSubBoms.length > 0) {
     const repaired = await repairHierarchyBottomUp({
       missingSubBoms: initialVerify.missingSubBoms,
@@ -4818,27 +4829,27 @@ export async function copyBomHierarchyWithRepair({
       targetAltMap.set(`${rep.material}:${rep.plant}:${rep.bomUsage}`, rep.alternativeBom);
     }
     createdBoms.push(...repaired);
-  }
 
-  // STEP 4: RE-VERIFY complete hierarchy
-  onProgress?.('Verifying complete structure...');
-  const finalVerify = await inspectAndVerifyHierarchy({
-    source: {
-      material: cleanSrcMat,
-      plant: cleanSrcPlant,
-      bomUsage: cleanSrcUsage,
-      alternativeBom: cleanSrcAlt
-    },
-    target: {
-      material: cleanTgtMat,
-      plant: cleanTgtPlant,
-      bomUsage: cleanTgtUsage,
-      alternativeBom: mainTargetAlt
-    },
-    targetAltMap,
-    maxDepth,
-    isReverify: true
-  });
+    // STEP 4: RE-VERIFY complete hierarchy ONLY if repairs were made
+    onProgress?.('Verifying complete structure...');
+    finalVerify = await inspectAndVerifyHierarchy({
+      source: {
+        material: cleanSrcMat,
+        plant: cleanSrcPlant,
+        bomUsage: cleanSrcUsage,
+        alternativeBom: cleanSrcAlt
+      },
+      target: {
+        material: cleanTgtMat,
+        plant: cleanTgtPlant,
+        bomUsage: cleanTgtUsage,
+        alternativeBom: mainTargetAlt
+      },
+      targetAltMap,
+      maxDepth,
+      isReverify: true
+    });
+  }
 
   if (!finalVerify.match) {
     const err = new Error(`Structural verification failed for BOM hierarchy: ${finalVerify.summary}`);
