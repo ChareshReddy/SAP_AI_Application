@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   AlertTriangle,
   AlertOctagon,
@@ -18,7 +18,7 @@ export default function ConfirmationCard({
   action,
   onConfirm,
   onCancel,
-  status = 'pending' // 'pending' | 'executing' | 'confirmed' | 'cancelled' | 'expired'
+  status = 'pending' // 'pending' | 'executing' | 'confirmed' | 'cancelled' | 'expired' | 'failed'
 }) {
   const { actionId, type, preview, expiresAt, riskLevel, requiresReason, systemKey } = action;
 
@@ -29,34 +29,72 @@ export default function ConfirmationCard({
   const [reason, setReason] = useState(() => action.reason || preview?.reason || '');
   const [prodConfirmation, setProdConfirmation] = useState('');
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const [isActionTriggered, setIsActionTriggered] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(() => {
     if (!expiresAt) return 300;
     return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
   });
 
-  const isExpired = secondsRemaining <= 0 || status === 'expired';
+  const timerRef = useRef(null);
+
   const isDone = status === 'confirmed' || status === 'cancelled';
-  const isExecuting = status === 'executing';
+  const isFailed = status === 'failed';
+  const isExecuting = status === 'executing' || (isActionTriggered && !isDone && !isFailed);
+  const isExpired = (!isExecuting && !isDone && !isFailed && secondsRemaining <= 0) || status === 'expired';
+
+  // Synchronously stop and clear countdown timer
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  // TTL Countdown Timer: runs ONLY while waiting for user confirmation
+  useEffect(() => {
+    const shouldRunTimer = status === 'pending' && !isActionTriggered && !isExecuting && !isDone && !isFailed && !isExpired;
+
+    if (!shouldRunTimer) {
+      stopTimer();
+      return;
+    }
+
+    // Always clear existing interval before creating a new one to prevent duplicates
+    stopTimer();
+
+    timerRef.current = setInterval(() => {
+      const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+      setSecondsRemaining(remaining);
+      if (remaining <= 0) {
+        stopTimer();
+      }
+    }, 1000);
+
+    return () => {
+      stopTimer();
+    };
+  }, [expiresAt, status, isActionTriggered, isExecuting, isDone, isFailed, isExpired, stopTimer]);
+
+  const handleConfirmClick = () => {
+    setIsActionTriggered(true);
+    stopTimer();
+    onConfirm(actionId, {
+      reason: reason.trim(),
+      prodConfirmation: prodConfirmation.trim(),
+      systemKey: targetSystem
+    });
+  };
+
+  const handleCancelClick = () => {
+    setIsActionTriggered(true);
+    stopTimer();
+    onCancel(actionId);
+  };
 
   // Dynamic entity naming
   const entityLabel = preview?.entityLabel || 'Record';
   const recordId = preview?.recordId || preview?.businessPartnerId || '';
   const recordName = preview?.recordName || preview?.businessPartnerName || '';
-
-  // TTL Countdown Timer
-  useEffect(() => {
-    if (isDone || isExpired) return;
-
-    const timer = setInterval(() => {
-      const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-      setSecondsRemaining(remaining);
-      if (remaining <= 0) {
-        clearInterval(timer);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [expiresAt, isDone, isExpired]);
 
   const formatTime = (totalSecs) => {
     const mins = Math.floor(totalSecs / 60);
@@ -165,12 +203,23 @@ export default function ConfirmationCard({
               <X size={12} /> Cancelled
             </span>
           )}
-          {isExpired && !isDone && (
+          {isFailed && (
+            <span className="sap-badge sap-badge-danger">
+              <AlertOctagon size={12} /> Failed
+            </span>
+          )}
+          {isExecuting && (
+            <span className="sap-badge sap-badge-running" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className="sap-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+              <span>Executing...</span>
+            </span>
+          )}
+          {isExpired && !isDone && !isExecuting && !isFailed && (
             <span className="sap-badge sap-badge-danger">
               <Clock size={12} /> Expired
             </span>
           )}
-          {!isDone && !isExpired && (
+          {status === 'pending' && !isActionTriggered && !isExecuting && !isDone && !isFailed && !isExpired && (
             <span className="sap-badge sap-badge-timer" title="Action expires if unconfirmed">
               <Clock size={12} /> Expires in {formatTime(secondsRemaining)}
             </span>
@@ -870,12 +919,12 @@ export default function ConfirmationCard({
       </div>
 
       {/* Card Actions Footer */}
-      {!isDone && !isExpired && (
+      {!isDone && !isExpired && !isFailed && (
         <div className="sap-confirm-footer">
           <button
             type="button"
             className="sap-btn sap-btn-secondary"
-            onClick={() => onCancel(actionId)}
+            onClick={handleCancelClick}
             disabled={isExecuting}
             style={{ height: 34, fontSize: '13px', padding: '0 14px' }}
           >
@@ -886,11 +935,7 @@ export default function ConfirmationCard({
           <button
             type="button"
             className={`sap-btn ${type === 'delete' || type === 'delete_bom' || type === 'post_fi_doc' ? 'sap-btn-danger' : 'sap-btn-primary'}`}
-            onClick={() => onConfirm(actionId, {
-              reason: reason.trim(),
-              prodConfirmation: prodConfirmation.trim(),
-              systemKey: targetSystem
-            })}
+            onClick={handleConfirmClick}
             disabled={
               isExecuting ||
               ((type === 'delete' || type === 'delete_bom') && !deleteAcknowledged) ||
@@ -950,9 +995,15 @@ export default function ConfirmationCard({
         </div>
       )}
 
-      {isExpired && !isDone && (
+      {isExpired && !isDone && !isFailed && (
         <div className="sap-confirm-footer" style={{ color: 'var(--sap-error)', fontSize: '12px' }}>
           ⚠️ This proposal expired after 5 minutes of inactivity. Please issue a new request.
+        </div>
+      )}
+
+      {isFailed && (
+        <div className="sap-confirm-footer" style={{ color: 'var(--sap-error)', fontSize: '12px' }}>
+          ⚠️ Execution failed.
         </div>
       )}
     </div>

@@ -66,13 +66,12 @@ const DEFAULT_INTERFACE_COLUMNS = [
 ];
 
 const DEFAULT_BOM_COLUMNS = [
-  { name: 'material', label: 'Material Number', readOnly: true },
-  { name: 'plant', label: 'Plant Code' },
+  { name: 'material', label: 'Material', readOnly: true },
+  { name: 'plant', label: 'Plant' },
   { name: 'bomUsage', label: 'BOM Usage' },
-  { name: 'alternativeBom', label: 'Alternative BOM' },
+  { name: 'alternativeBom', label: 'Alternative', aliases: ['targetAlternative', 'alternative', 'altBom'] },
   { name: 'validFrom', label: 'Valid From' },
-  { name: 'description', label: 'Description' },
-  { name: 'components', label: 'BOM Components' }
+  { name: 'description', label: 'Description' }
 ];
 
 export default function EntityTable({
