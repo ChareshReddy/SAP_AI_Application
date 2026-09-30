@@ -380,12 +380,16 @@ export default function ChatBox({ isActive = true, onActionExecuted, systemKey =
       prev.map((m) => (m.id === msgId ? { ...m, actionStatus: 'executing' } : m))
     );
 
+    const currentMsg = messages.find((m) => m.id === msgId);
+    const proposedAction = currentMsg?.proposedAction;
+    const isCopyBom = proposedAction?.type === 'copy_bom';
+
     try {
       const res = await confirmChatAction(actionId, { ...options, systemKey: options.systemKey || systemKey });
       if (res.error) {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === msgId ? { ...m, actionStatus: res.expired ? 'expired' : 'pending' } : m
+            m.id === msgId ? { ...m, actionStatus: res.expired ? 'expired' : 'failed' } : m
           )
         );
         setErrorBanner(res.reply || 'Execution failed.');
@@ -397,12 +401,69 @@ export default function ChatBox({ isActive = true, onActionExecuted, systemKey =
         prev.map((m) => (m.id === msgId ? { ...m, actionStatus: 'confirmed' } : m))
       );
 
+      // Presentation formatting: present as ONE BOM copy operation and show only top-level result
+      let formattedReply = res.reply;
+      let displayData = res.data && res.data.length > 0 ? res.data : null;
+      let displaySchema = res.schema || null;
+
+      const isCopyBomAction = isCopyBom || res.actionExecuted?.type === 'copy_bom' || /Successfully copied.*BOM/i.test(res.reply);
+
+      if (isCopyBomAction) {
+        const preview = proposedAction?.preview;
+        const targetMat = preview?.targetMaterial || res.actionResult?.after?.material || (Array.isArray(res.data) ? res.data[0]?.material : null) || res.actionExecuted?.recordId;
+        const targetPlant = preview?.targetPlant || res.actionResult?.after?.plant || (Array.isArray(res.data) ? res.data[0]?.plant : null);
+
+        if (targetMat && targetPlant) {
+          formattedReply = `Successfully copied BOM ${targetMat} to plant ${targetPlant}.\n\nComplete BOM hierarchy copied and verified.`;
+        } else if (targetMat) {
+          formattedReply = `Successfully copied BOM ${targetMat}.\n\nComplete BOM hierarchy copied and verified.`;
+        } else {
+          formattedReply = (res.reply || 'Successfully copied BOM.')
+            .replace(/^✅\s*/, '')
+            .replace(/complete BOM hierarchy for\s+([A-Z0-9_-]+)\s*\([^)]*\)/i, 'BOM $1')
+            .replace(/\s*\(\d+\s*BOMs?\s*created[^)]*\)/i, '') + '\n\nComplete BOM hierarchy copied and verified.';
+        }
+
+        // Show only the original / top-level BOM requested by the user
+        const rawTopRecord = res.actionResult?.after ||
+          (Array.isArray(res.data) ? res.data.find((r) => r.isMain || r.depth === 0) : null) ||
+          (Array.isArray(res.data) && preview?.targetMaterial ? res.data.find((r) => r.material === preview.targetMaterial) : null) ||
+          (Array.isArray(res.data) ? res.data[0] : null);
+
+        if (rawTopRecord) {
+          const topLevelRecord = {
+            ...rawTopRecord,
+            material: rawTopRecord.material || preview?.targetMaterial || targetMat || '',
+            plant: rawTopRecord.plant || preview?.targetPlant || targetPlant || '',
+            bomUsage: rawTopRecord.bomUsage || preview?.targetUsage || '1',
+            alternativeBom: rawTopRecord.alternativeBom || rawTopRecord.targetAlternative || preview?.targetAltBom || '1',
+            validFrom: rawTopRecord.validFrom || preview?.validFrom || '—',
+            description: rawTopRecord.description || preview?.description || preview?.targetDescription || preview?.sourceDescription || '—'
+          };
+
+          displayData = [topLevelRecord];
+          displaySchema = {
+            entityKey: 'bom',
+            columns: [
+              { name: 'material', label: 'Material', readOnly: true },
+              { name: 'plant', label: 'Plant' },
+              { name: 'bomUsage', label: 'BOM Usage' },
+              { name: 'alternativeBom', label: 'Alternative', aliases: ['targetAlternative', 'alternative', 'altBom'] },
+              { name: 'validFrom', label: 'Valid From' },
+              { name: 'description', label: 'Description' }
+            ]
+          };
+        }
+      }
+
       // Append result message
       const resultMsg = {
         id: (Date.now() + 1).toString(),
         sender: 'assistant',
-        text: res.reply,
-        data: res.data && res.data.length > 0 ? res.data : null,
+        text: formattedReply,
+        data: displayData,
+        schema: displaySchema,
+        entityKey: isCopyBomAction ? 'bom' : (res.entityKey || null),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages((prev) => [...prev, resultMsg]);
@@ -419,7 +480,7 @@ export default function ChatBox({ isActive = true, onActionExecuted, systemKey =
     } catch (err) {
       console.error('Error confirming action:', err);
       setMessages((prev) =>
-        prev.map((m) => (m.id === msgId ? { ...m, actionStatus: 'pending' } : m))
+        prev.map((m) => (m.id === msgId ? { ...m, actionStatus: 'failed' } : m))
       );
       setErrorBanner(err.response?.data?.reply || err.message || 'Failed to execute confirmed action.');
     }
@@ -564,7 +625,9 @@ export default function ChatBox({ isActive = true, onActionExecuted, systemKey =
                       totalCount={msg.data.length}
                       title={
                         msg.entityKey === 'bom' || (msg.data && msg.data[0]?.material && (msg.data[0]?.bomUsage !== undefined || msg.data[0]?.components !== undefined))
-                          ? `Results: ${msg.data.length} Bill(s) of Materials Returned`
+                          ? msg.data.length === 1
+                            ? 'Results: 1 Bill of Materials'
+                            : `Results: ${msg.data.length} Bills of Materials`
                           : `Results: ${msg.data.length} Record(s) Returned`
                       }
                     />

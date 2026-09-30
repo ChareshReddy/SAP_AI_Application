@@ -324,12 +324,6 @@ export default function App() {
             )}
           </span>
 
-          {/* User Badge */}
-          <div className="sap-user-badge">
-            <User size={15} color="#94a3b8" />
-            <span>{sapSession.selectedUser || sapSession.user || user.username}</span>
-          </div>
-
           {/* Logout Button */}
           <button
             type="button"
