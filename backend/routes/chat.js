@@ -1873,7 +1873,7 @@ router.post('/', async (req, res) => {
           tools: TOOLS,
           tool_choice: 'auto'
         },
-        { headers, timeout: 60000 }
+        { headers, timeout: 30000 }
       );
     } catch (firstCallErr) {
       logOpenRouterError('Initial Call to OpenRouter', firstCallErr);
@@ -3994,7 +3994,7 @@ router.post('/', async (req, res) => {
             model,
             messages: toolMessages
           },
-          { headers, timeout: 60000 }
+          { headers, timeout: 30000 }
         );
 
         const content = followUpResponse.data?.choices?.[0]?.message?.content;
